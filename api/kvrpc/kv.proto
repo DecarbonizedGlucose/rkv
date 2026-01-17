@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/kvrpc/kvpb";
+
+package kvrpc;
+
+// Service
+
+service KeyValue {
+    rpc Get(GetRequest) returns (GetResponse);
+    rpc Put(PutRequest) returns (PutResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc Append(AppendRequest) returns (AppendResponse);
+    rpc CAS(CASRequest) returns (CASResponse);
+    // rpc MultiGet
+}
+
+// Errors
+
+enum StatusCode {
+    STATUS_UNSPECIFIED = 0;
+
+    OK                     = 1;     // No error
+    KEY_NOT_FOUND          = 2;     // ErrNoKey
+    VERSION_MISMATCH       = 3;     // ErrWrongVersion / ErrVersionMismatch
+    CONFLICT               = 4;     // ErrConflict (transaction conflict, CAS failure, etc)
+    COMPACTED              = 5;     // ErrCompacted
+    EXPIRED                = 6;     // ErrExpired
+    NOT_LEADER             = 7;     // ErrNotLeader / ErrWrongLeader
+    TIMEOUT                = 8;     // ErrTimeout
+    UNAVAILABLE            = 9;     // Service Unavailable
+    INTERNAL               = 10;    // Internal Error
+}
+
+// Requests and Responses
+
+message GetRequest {
+    string key = 1;
+}
+
+message GetResponse {
+    string value = 1;
+    int64 version = 2;
+    StatusCode status = 3;
+}
+
+message PutRequest {
+    string key = 1;
+    string value = 2;
+}
+
+message PutResponse {
+    int64 version = 1;
+    StatusCode status = 2;
+}
+
+message DeleteRequest {
+    string key = 1;
+}
+
+message DeleteResponse {
+    StatusCode status = 1;
+}
+
+message AppendRequest {
+    string key = 1;
+    string suffix = 2;
+}
+
+message AppendResponse {
+    string value = 1;
+    int64 version = 2;
+    StatusCode status = 3;
+}
+
+message CASRequest {
+    string key = 1;
+    int64 expected_version = 2;
+    string value = 3;
+}
+
+message CASResponse {
+    int64 version = 1;
+    StatusCode status = 2;
+}
+
+
+message MultiRequest {
+    repeated string keys = 1;
+}
+
+// may use streaming rpc, now not included in service
+message MultiResponse {
+
+}
+
