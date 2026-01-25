@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/DecarbonizedGlucose/rkv/api/raftrpc/raftrpcpb";
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/raftrpc;raftrpcpb";
 
 package raftrpc;
 

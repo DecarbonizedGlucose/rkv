@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/DecarbonizedGlucose/rkv/api/kvrpc/kvpb";
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/kvrpc;kvpb";
 
 package kvrpc;
 

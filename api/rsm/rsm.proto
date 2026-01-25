@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rsm;
 
-option go_package = "github.com/DecarbonizedGlucose/rkv/api/rsm/rsmpb";
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/rsm;rsmpb";
 
 //import "google/protobuf/any.proto";
 import "api/kvrpc/kv.proto";
