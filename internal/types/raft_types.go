@@ -1,12 +1,12 @@
 package types
 
 import (
-	rsm "github.com/DecarbonizedGlucose/rkv/api/rsm"
+	rapb "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
 )
 
 type Raft interface {
-	Start(command interface{}) (int, int, bool)
-	GetState() (int, bool)
+	Start(command *rapb.RequestWithMeta) (int, int64, bool)
+	GetState() (int64, bool)
 	Snapshot(index int, snapshot []byte)
 	PersistBytes() int
 	Kill()
@@ -14,11 +14,11 @@ type Raft interface {
 
 type ApplyMsg struct {
 	CommandValid bool
-	Command      rsm.Command
+	Command      *rapb.RequestWithMeta
 	CommandIndex int
 
 	SnapshotValid bool
 	Snapshot      []byte
-	SnapshotTerm  int
+	SnapshotTerm  int64
 	SnapshotIndex int
 }
