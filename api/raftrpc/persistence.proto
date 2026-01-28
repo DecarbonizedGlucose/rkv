@@ -4,7 +4,7 @@ option go_package = "github.com/DecarbonizedGlucose/rkv/api/raftrpc;raftrpcpb";
 
 package raftrpc;
 
-service RaftSnapshot {
+service RaftPersistence {
     rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse);
 }
 

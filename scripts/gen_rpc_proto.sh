@@ -12,14 +12,14 @@ protoc \
     --go-grpc_out=. \
     --go-grpc_opt=paths=source_relative \
     api/raftrpc/consensus.proto \
-    api/raftrpc/snapshot.proto
+    api/raftrpc/persistence.proto
 
-# generate rsm pb files
+# generate raft applier pb files
 protoc \
     --proto_path=. \
     --go_out=. \
     --go_opt=paths=source_relative \
-    api/rsm/rsm.proto
+    api/raftapplier/raftapplier.proto
 
 # generate kvrpc pb files
 protoc \

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package raftapplier;
+
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/raftapplier;raftapplierpb";
+
+import "api/kvrpc/kv.proto";
+
+message RequestWithMeta {
+    string client_ID = 1;
+    string request_ID = 2;
+    oneof KVRequest {
+        kvrpc.GetRequest get_request = 3;
+        kvrpc.PutRequest put_request = 4;
+        kvrpc.DeleteRequest delete_request = 5;
+        kvrpc.AppendRequest append_request = 6;
+        kvrpc.CASRequest cas_request = 7;
+        // and, the multi-get request, TODO
+    }
+}
+
+message Response {
+    oneof KVResponse {
+        kvrpc.GetResponse get_response = 1;
+        kvrpc.PutResponse put_response = 2;
+        kvrpc.DeleteResponse delete_response = 3;
+        kvrpc.AppendResponse append_response = 4;
+        kvrpc.CASResponse cas_response = 5;
+        // and, the multi-get response, TODO
+    }
+}

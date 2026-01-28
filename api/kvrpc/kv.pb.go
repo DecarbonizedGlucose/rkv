@@ -96,7 +96,7 @@ func (StatusCode) EnumDescriptor() ([]byte, []int) {
 
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -131,16 +131,16 @@ func (*GetRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GetRequest) GetKey() string {
+func (x *GetRequest) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
 type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -177,11 +177,11 @@ func (*GetResponse) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetResponse) GetValue() string {
+func (x *GetResponse) GetValue() []byte {
 	if x != nil {
 		return x.Value
 	}
-	return ""
+	return nil
 }
 
 func (x *GetResponse) GetVersion() int64 {
@@ -200,8 +200,8 @@ func (x *GetResponse) GetStatus() StatusCode {
 
 type PutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -236,18 +236,18 @@ func (*PutRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PutRequest) GetKey() string {
+func (x *PutRequest) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
-func (x *PutRequest) GetValue() string {
+func (x *PutRequest) GetValue() []byte {
 	if x != nil {
 		return x.Value
 	}
-	return ""
+	return nil
 }
 
 type PutResponse struct {
@@ -304,7 +304,7 @@ func (x *PutResponse) GetStatus() StatusCode {
 
 type DeleteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -339,11 +339,11 @@ func (*DeleteRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *DeleteRequest) GetKey() string {
+func (x *DeleteRequest) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
 type DeleteResponse struct {
@@ -392,8 +392,8 @@ func (x *DeleteResponse) GetStatus() StatusCode {
 
 type AppendRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Suffix        string                 `protobuf:"bytes,2,opt,name=suffix,proto3" json:"suffix,omitempty"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Suffix        []byte                 `protobuf:"bytes,2,opt,name=suffix,proto3" json:"suffix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -428,23 +428,23 @@ func (*AppendRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *AppendRequest) GetKey() string {
+func (x *AppendRequest) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
-func (x *AppendRequest) GetSuffix() string {
+func (x *AppendRequest) GetSuffix() []byte {
 	if x != nil {
 		return x.Suffix
 	}
-	return ""
+	return nil
 }
 
 type AppendResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -481,11 +481,11 @@ func (*AppendResponse) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *AppendResponse) GetValue() string {
+func (x *AppendResponse) GetValue() []byte {
 	if x != nil {
 		return x.Value
 	}
-	return ""
+	return nil
 }
 
 func (x *AppendResponse) GetVersion() int64 {
@@ -504,9 +504,9 @@ func (x *AppendResponse) GetStatus() StatusCode {
 
 type CASRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Key             string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key             []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	ExpectedVersion int64                  `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
-	Value           string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Value           []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -541,11 +541,11 @@ func (*CASRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *CASRequest) GetKey() string {
+func (x *CASRequest) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
 func (x *CASRequest) GetExpectedVersion() int64 {
@@ -555,11 +555,11 @@ func (x *CASRequest) GetExpectedVersion() int64 {
 	return 0
 }
 
-func (x *CASRequest) GetValue() string {
+func (x *CASRequest) GetValue() []byte {
 	if x != nil {
 		return x.Value
 	}
-	return ""
+	return nil
 }
 
 type CASResponse struct {
@@ -616,7 +616,7 @@ func (x *CASResponse) GetStatus() StatusCode {
 
 type MultiRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
+	Keys          [][]byte               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -651,7 +651,7 @@ func (*MultiRequest) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *MultiRequest) GetKeys() []string {
+func (x *MultiRequest) GetKeys() [][]byte {
 	if x != nil {
 		return x.Keys
 	}
@@ -702,39 +702,39 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"\x12api/kvrpc/kv.proto\x12\x05kvrpc\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"h\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\"h\n" +
 	"\vGetResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x12\x18\n" +
+	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12)\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"4\n" +
 	"\n" +
 	"PutRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"R\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"R\n" +
 	"\vPutResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12)\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\";\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\";\n" +
 	"\x0eDeleteResponse\x12)\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"9\n" +
 	"\rAppendRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
-	"\x06suffix\x18\x02 \x01(\tR\x06suffix\"k\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\x12\x16\n" +
+	"\x06suffix\x18\x02 \x01(\fR\x06suffix\"k\n" +
 	"\x0eAppendResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x12\x18\n" +
+	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12)\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"_\n" +
 	"\n" +
 	"CASRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\x12)\n" +
 	"\x10expected_version\x18\x02 \x01(\x03R\x0fexpectedVersion\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"R\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\"R\n" +
 	"\vCASResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12)\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"\"\n" +
 	"\fMultiRequest\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\"\x0f\n" +
+	"\x04keys\x18\x01 \x03(\fR\x04keys\"\x0f\n" +
 	"\rMultiResponse*\xbb\x01\n" +
 	"\n" +
 	"StatusCode\x12\x16\n" +
