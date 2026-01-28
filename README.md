@@ -1,2 +1,2 @@
-# rkv
-A distributed key-value store built with Raft, gRPC, and Protobuf. A lightweight, educational etcd-like system for exploring consensus and distributed systems.
+# RKV: A High-Performance Distributed Key-Value Store
+RKV is a distributed key-value storage system built on the Raft consensus algorithm. This project adopts a highly decoupled architecture, supports multiple access protocols (gRPC, Redis, HTTP), and implements pluggable storage engines.
