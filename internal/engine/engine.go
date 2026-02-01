@@ -1,9 +1,9 @@
 package engine
 
 type Storage interface {
-	Get(key string) (string, int64, error)
-	Put(key, value string) (int64, error)
-	Delete(key string) error
-	Append(key, suffix string) (string, int64, error)
-	CompareAndSwap(key string, version int64, value string) (int64, error)
+	Get(key []byte) ([]byte, uint64, error)
+	Put(key, value []byte) (uint64, error)
+	Delete(key []byte) error
+	Append(key, suffix []byte) ([]byte, uint64, error)
+	CompareAndSwap(key []byte, version uint64, value []byte) (uint64, error)
 }
