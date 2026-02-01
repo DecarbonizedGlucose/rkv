@@ -9,7 +9,6 @@ import (
 	rapb "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
 	"github.com/DecarbonizedGlucose/rkv/internal/raft"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
-	"google.golang.org/grpc"
 )
 
 type kvexecutor interface {
@@ -20,7 +19,7 @@ type kvexecutor interface {
 
 type RaftApplier struct {
 	//mu           sync.Mutex
-	rf           types.Raft
+	rf           *raft.Raft
 	applyCh      chan *types.ApplyMsg
 	maxraftstate int
 	exec         kvexecutor
@@ -29,11 +28,9 @@ type RaftApplier struct {
 }
 
 func MakeRaftApplier(
-	servers []*grpc.ClientConn,
-	me int,
-	persister *raft.Persister,
 	maxraftstate int,
 	exec kvexecutor,
+	rf *raft.Raft,
 ) *RaftApplier {
 	ra := &RaftApplier{
 		maxraftstate: maxraftstate,
@@ -42,7 +39,7 @@ func MakeRaftApplier(
 		waitingCmds:  make(map[int]chan *rapb.Response),
 	}
 	ra.shutdown.Store(false)
-	ra.rf = raft.Make(servers, me, persister, ra.applyCh)
+	ra.rf = rf
 	/*
 		read snapshot
 	*/
@@ -117,7 +114,7 @@ func (ra *RaftApplier) applyLoop() {
 }
 
 func (ra *RaftApplier) applyCommand(msg *types.ApplyMsg) {
-	req := &msg.Command
+	req := msg.Command
 	res := ra.exec.Execute(req)
 	if ch, exists := ra.waitingCmds[msg.CommandIndex]; exists {
 		ch <- res

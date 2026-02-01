@@ -9,7 +9,6 @@ import (
 	raftpb "github.com/DecarbonizedGlucose/rkv/api/raftrpc"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
 	"github.com/DecarbonizedGlucose/rkv/internal/utils"
-	"google.golang.org/grpc"
 )
 
 /* ==================== Definition and Construction ==================== */
@@ -21,7 +20,7 @@ const (
 )
 
 type Raft struct {
-	peers           []*grpc.ClientConn             // ends of logical connections
+	peers           []*Peer                        // raft rpc peers
 	consensusEnds   []raftpb.RaftConsensusClient   // consensus rpc peers
 	persistenceEnds []raftpb.RaftPersistenceClient // persistence rpc peers
 	persister       *Persister
@@ -49,22 +48,13 @@ type Raft struct {
 	lastIncludedTerm  int64 // highest log entry term included in snapshot
 }
 
-func Make(peers []*grpc.ClientConn, me int, persister *Persister, applyCh chan *types.ApplyMsg) types.Raft {
+func MakeRaft(peers []*Peer, me int, persister *Persister, applyCh chan *types.ApplyMsg) *Raft {
 	rf := &Raft{}
 	rf.me = me
 	rf.peers = peers
 	n := len(peers)
 	rf.consensusEnds = make([]raftpb.RaftConsensusClient, n)
 	rf.persistenceEnds = make([]raftpb.RaftPersistenceClient, n)
-	for i, peer := range rf.peers {
-		if i == rf.me {
-			rf.consensusEnds[i] = nil
-			rf.persistenceEnds[i] = nil
-		} else {
-			rf.consensusEnds[i] = raftpb.NewRaftConsensusClient(peer)
-			rf.persistenceEnds[i] = raftpb.NewRaftPersistenceClient(peer)
-		}
-	}
 	rf.mu = sync.Mutex{}
 	atomic.StoreInt32(&rf.dead, 0)
 	rf.currentTerm = 0
@@ -82,7 +72,7 @@ func Make(peers []*grpc.ClientConn, me int, persister *Persister, applyCh chan *
 	rf.applyCh = applyCh
 	rf.applyCond = sync.NewCond(&rf.mu)
 	// Read Snapshot
-	// rf.readPersist(persisier.ReadRaftState)
+	// rf.readPersist(persister.ReadRaftState)
 	rf.commitIndex = max(rf.commitIndex, rf.lastIncludedIndex)
 	rf.lastApplied = max(rf.lastApplied, rf.lastIncludedIndex)
 

@@ -7,16 +7,6 @@ import (
 	raftpb "github.com/DecarbonizedGlucose/rkv/api/raftrpc"
 )
 
-/* ==================== Logical Server ==================== */
-
-type raftConsensusServer struct {
-	raftpb.UnimplementedRaftConsensusServer
-}
-
-type raftPersistenceServer struct {
-	raftpb.UnimplementedRaftPersistenceServer
-}
-
 /* ==================== Election and Voting ==================== */
 
 func (rf *Raft) callRequestVote(
