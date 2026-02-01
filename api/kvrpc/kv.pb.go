@@ -141,7 +141,7 @@ func (x *GetRequest) GetKey() []byte {
 type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -184,7 +184,7 @@ func (x *GetResponse) GetValue() []byte {
 	return nil
 }
 
-func (x *GetResponse) GetVersion() int64 {
+func (x *GetResponse) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
@@ -252,7 +252,7 @@ func (x *PutRequest) GetValue() []byte {
 
 type PutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -288,7 +288,7 @@ func (*PutResponse) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PutResponse) GetVersion() int64 {
+func (x *PutResponse) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
@@ -445,7 +445,7 @@ func (x *AppendRequest) GetSuffix() []byte {
 type AppendResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -488,7 +488,7 @@ func (x *AppendResponse) GetValue() []byte {
 	return nil
 }
 
-func (x *AppendResponse) GetVersion() int64 {
+func (x *AppendResponse) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
@@ -505,7 +505,7 @@ func (x *AppendResponse) GetStatus() StatusCode {
 type CASRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Key             []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	ExpectedVersion int64                  `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	ExpectedVersion uint64                 `protobuf:"varint,2,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
 	Value           []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -548,7 +548,7 @@ func (x *CASRequest) GetKey() []byte {
 	return nil
 }
 
-func (x *CASRequest) GetExpectedVersion() int64 {
+func (x *CASRequest) GetExpectedVersion() uint64 {
 	if x != nil {
 		return x.ExpectedVersion
 	}
@@ -564,7 +564,7 @@ func (x *CASRequest) GetValue() []byte {
 
 type CASResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Status        StatusCode             `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -600,7 +600,7 @@ func (*CASResponse) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *CASResponse) GetVersion() int64 {
+func (x *CASResponse) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
@@ -705,14 +705,14 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\fR\x03key\"h\n" +
 	"\vGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\x12)\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x12)\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"4\n" +
 	"\n" +
 	"PutRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\"R\n" +
 	"\vPutResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\x12)\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\x12)\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\";\n" +
@@ -723,15 +723,15 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"\x06suffix\x18\x02 \x01(\fR\x06suffix\"k\n" +
 	"\x0eAppendResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\x12)\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x12)\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"_\n" +
 	"\n" +
 	"CASRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12)\n" +
-	"\x10expected_version\x18\x02 \x01(\x03R\x0fexpectedVersion\x12\x14\n" +
+	"\x10expected_version\x18\x02 \x01(\x04R\x0fexpectedVersion\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\"R\n" +
 	"\vCASResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\x12)\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\x12)\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"\"\n" +
 	"\fMultiRequest\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\fR\x04keys\"\x0f\n" +

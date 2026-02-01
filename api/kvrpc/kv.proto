@@ -40,7 +40,7 @@ message GetRequest {
 
 message GetResponse {
     bytes value = 1;
-    int64 version = 2;
+    uint64 version = 2;
     StatusCode status = 3;
 }
 
@@ -50,7 +50,7 @@ message PutRequest {
 }
 
 message PutResponse {
-    int64 version = 1;
+    uint64 version = 1;
     StatusCode status = 2;
 }
 
@@ -69,18 +69,18 @@ message AppendRequest {
 
 message AppendResponse {
     bytes value = 1;
-    int64 version = 2;
+    uint64 version = 2;
     StatusCode status = 3;
 }
 
 message CASRequest {
     bytes key = 1;
-    int64 expected_version = 2;
+    uint64 expected_version = 2;
     bytes value = 3;
 }
 
 message CASResponse {
-    int64 version = 1;
+    uint64 version = 1;
     StatusCode status = 2;
 }
 
