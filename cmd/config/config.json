@@ -1,0 +1,9 @@
+{
+    "self_id": "node1",
+    "nodes": [
+        {"id": "node1", "address": "127.0.0.1:8001"},
+        {"id": "node2", "address": "127.0.0.1:8002"},
+        {"id": "node3", "address": "127.0.0.1:8003"}
+    ],
+    "max_raft_state": 4096
+}
