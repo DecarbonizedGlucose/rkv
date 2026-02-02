@@ -3,6 +3,7 @@ package engine
 import (
 	"log"
 
+	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	"github.com/dgraph-io/badger"
 )
 
@@ -124,4 +125,17 @@ func (st *BadgerStorage) CompareAndSwap(key []byte, version uint64, value []byte
 		return 0, err
 	}
 	return item.Version(), nil
+}
+
+func ErrorTranslate(err error) kvpb.StatusCode {
+	switch err {
+	case nil:
+		return kvpb.StatusCode_OK
+	case badger.ErrKeyNotFound:
+		return kvpb.StatusCode_KEY_NOT_FOUND
+	case badger.ErrConflict:
+		return kvpb.StatusCode_CONFLICT
+	default:
+		return kvpb.StatusCode_INTERNAL
+	}
 }
