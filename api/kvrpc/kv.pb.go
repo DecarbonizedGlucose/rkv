@@ -33,8 +33,9 @@ const (
 	StatusCode_EXPIRED            StatusCode = 6  // ErrExpired
 	StatusCode_NOT_LEADER         StatusCode = 7  // ErrNotLeader / ErrWrongLeader
 	StatusCode_TIMEOUT            StatusCode = 8  // ErrTimeout
-	StatusCode_UNAVAILABLE        StatusCode = 9  // Service Unavailable
-	StatusCode_INTERNAL           StatusCode = 10 // Internal Error
+	StatusCode_OUTDATED           StatusCode = 9  // ErrOutdated
+	StatusCode_UNAVAILABLE        StatusCode = 10 // Service Unavailable
+	StatusCode_INTERNAL           StatusCode = 11 // Internal Error
 )
 
 // Enum value maps for StatusCode.
@@ -49,8 +50,9 @@ var (
 		6:  "EXPIRED",
 		7:  "NOT_LEADER",
 		8:  "TIMEOUT",
-		9:  "UNAVAILABLE",
-		10: "INTERNAL",
+		9:  "OUTDATED",
+		10: "UNAVAILABLE",
+		11: "INTERNAL",
 	}
 	StatusCode_value = map[string]int32{
 		"STATUS_UNSPECIFIED": 0,
@@ -62,8 +64,9 @@ var (
 		"EXPIRED":            6,
 		"NOT_LEADER":         7,
 		"TIMEOUT":            8,
-		"UNAVAILABLE":        9,
-		"INTERNAL":           10,
+		"OUTDATED":           9,
+		"UNAVAILABLE":        10,
+		"INTERNAL":           11,
 	}
 )
 
@@ -735,7 +738,7 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"\"\n" +
 	"\fMultiRequest\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\fR\x04keys\"\x0f\n" +
-	"\rMultiResponse*\xbb\x01\n" +
+	"\rMultiResponse*\xc9\x01\n" +
 	"\n" +
 	"StatusCode\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x06\n" +
@@ -747,10 +750,11 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"\aEXPIRED\x10\x06\x12\x0e\n" +
 	"\n" +
 	"NOT_LEADER\x10\a\x12\v\n" +
-	"\aTIMEOUT\x10\b\x12\x0f\n" +
-	"\vUNAVAILABLE\x10\t\x12\f\n" +
-	"\bINTERNAL\x10\n" +
-	"2\x82\x02\n" +
+	"\aTIMEOUT\x10\b\x12\f\n" +
+	"\bOUTDATED\x10\t\x12\x0f\n" +
+	"\vUNAVAILABLE\x10\n" +
+	"\x12\f\n" +
+	"\bINTERNAL\x10\v2\x82\x02\n" +
 	"\bKeyValue\x12,\n" +
 	"\x03Get\x12\x11.kvrpc.GetRequest\x1a\x12.kvrpc.GetResponse\x12,\n" +
 	"\x03Put\x12\x11.kvrpc.PutRequest\x1a\x12.kvrpc.PutResponse\x125\n" +

@@ -28,8 +28,9 @@ enum StatusCode {
     EXPIRED                = 6;     // ErrExpired
     NOT_LEADER             = 7;     // ErrNotLeader / ErrWrongLeader
     TIMEOUT                = 8;     // ErrTimeout
-    UNAVAILABLE            = 9;     // Service Unavailable
-    INTERNAL               = 10;    // Internal Error
+    OUTDATED               = 9;     // ErrOutdated
+    UNAVAILABLE            = 10;    // Service Unavailable
+    INTERNAL               = 11;    // Internal Error
 }
 
 // Requests and Responses

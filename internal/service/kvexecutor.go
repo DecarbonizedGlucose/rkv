@@ -6,16 +6,28 @@ import (
 	eg "github.com/DecarbonizedGlucose/rkv/internal/engine"
 )
 
+type SessionValue struct {
+	lastRequestID int64
+	lastResponse  *rapb.Response
+}
+
 type KVExecutor struct {
-	engine eg.Storage
+	engine   eg.Storage
+	sessions map[string]*SessionValue
 }
 
 func MakeKVExecutor() *KVExecutor {
-	return &KVExecutor{engine: eg.MakeStorage()}
+	return &KVExecutor{
+		engine:   eg.MakeStorage(),
+		sessions: make(map[string]*SessionValue),
+	}
 }
 
 func (exec *KVExecutor) Execute(reqM *rapb.RequestWithMeta) *rapb.Response {
-	response := &rapb.Response{}
+	response, dup := exec.IsDuplicate(reqM.Client_ID, reqM.Request_ID)
+	if dup {
+		return response
+	}
 	switch req := reqM.KVRequest.(type) {
 	case *rapb.RequestWithMeta_GetRequest:
 		response.KVResponse = &rapb.Response_GetResponse{
@@ -37,6 +49,11 @@ func (exec *KVExecutor) Execute(reqM *rapb.RequestWithMeta) *rapb.Response {
 		response.KVResponse = &rapb.Response_CasResponse{
 			CasResponse: exec.CompareAndSwap(req.CasRequest),
 		}
+	}
+	// update session
+	exec.sessions[reqM.Client_ID] = &SessionValue{
+		lastRequestID: reqM.Request_ID,
+		lastResponse:  response,
 	}
 	return response
 }
@@ -88,4 +105,47 @@ func (exec *KVExecutor) CompareAndSwap(req *kvpb.CASRequest) *kvpb.CASResponse {
 	res.Version, err = exec.engine.CompareAndSwap(req.Key, req.ExpectedVersion, req.Value)
 	res.Status = eg.ErrorTranslate(err)
 	return res
+}
+
+// Deduplication
+
+func GenOutdatedResponse() *rapb.Response {
+	response := &rapb.Response{}
+	switch res := response.KVResponse.(type) {
+	case *rapb.Response_GetResponse:
+		res.GetResponse = &kvpb.GetResponse{
+			Status: kvpb.StatusCode_OUTDATED,
+		}
+	case *rapb.Response_PutResponse:
+		res.PutResponse = &kvpb.PutResponse{
+			Status: kvpb.StatusCode_OUTDATED,
+		}
+	case *rapb.Response_DeleteResponse:
+		res.DeleteResponse = &kvpb.DeleteResponse{
+			Status: kvpb.StatusCode_OUTDATED,
+		}
+	case *rapb.Response_AppendResponse:
+		res.AppendResponse = &kvpb.AppendResponse{
+			Status: kvpb.StatusCode_OUTDATED,
+		}
+	case *rapb.Response_CasResponse:
+		res.CasResponse = &kvpb.CASResponse{
+			Status: kvpb.StatusCode_OUTDATED,
+		}
+	}
+	return response
+}
+
+func (exec *KVExecutor) IsDuplicate(clientID string, requestID int64) (*rapb.Response, bool) {
+	session, exists := exec.sessions[clientID]
+	if !exists {
+		return &rapb.Response{}, false
+	}
+	if requestID > session.lastRequestID {
+		return &rapb.Response{}, false
+	}
+	if requestID == session.lastRequestID {
+		return session.lastResponse, true
+	}
+	return GenOutdatedResponse(), true
 }
