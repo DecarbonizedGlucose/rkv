@@ -16,26 +16,26 @@ func MakeKVExecutor() *KVExecutor {
 
 func (exec *KVExecutor) Execute(reqM *rapb.RequestWithMeta) *rapb.Response {
 	response := &rapb.Response{}
-	switch reqM.KVRequest.(type) {
+	switch req := reqM.KVRequest.(type) {
 	case *rapb.RequestWithMeta_GetRequest:
 		response.KVResponse = &rapb.Response_GetResponse{
-			GetResponse: exec.Get(reqM.KVRequest.(*rapb.RequestWithMeta_GetRequest).GetRequest),
+			GetResponse: exec.Get(req.GetRequest),
 		}
 	case *rapb.RequestWithMeta_PutRequest:
 		response.KVResponse = &rapb.Response_PutResponse{
-			PutResponse: exec.Put(reqM.KVRequest.(*rapb.RequestWithMeta_PutRequest).PutRequest),
+			PutResponse: exec.Put(req.PutRequest),
 		}
 	case *rapb.RequestWithMeta_DeleteRequest:
 		response.KVResponse = &rapb.Response_DeleteResponse{
-			DeleteResponse: exec.Delete(reqM.KVRequest.(*rapb.RequestWithMeta_DeleteRequest).DeleteRequest),
+			DeleteResponse: exec.Delete(req.DeleteRequest),
 		}
 	case *rapb.RequestWithMeta_AppendRequest:
 		response.KVResponse = &rapb.Response_AppendResponse{
-			AppendResponse: exec.Append(reqM.KVRequest.(*rapb.RequestWithMeta_AppendRequest).AppendRequest),
+			AppendResponse: exec.Append(req.AppendRequest),
 		}
 	case *rapb.RequestWithMeta_CasRequest:
 		response.KVResponse = &rapb.Response_CasResponse{
-			CasResponse: exec.CompareAndSwap(reqM.KVRequest.(*rapb.RequestWithMeta_CasRequest).CasRequest),
+			CasResponse: exec.CompareAndSwap(req.CasRequest),
 		}
 	}
 	return response
