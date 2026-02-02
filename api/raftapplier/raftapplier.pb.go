@@ -25,7 +25,7 @@ const (
 type RequestWithMeta struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Client_ID  string                 `protobuf:"bytes,1,opt,name=client_ID,json=clientID,proto3" json:"client_ID,omitempty"`
-	Request_ID string                 `protobuf:"bytes,2,opt,name=request_ID,json=requestID,proto3" json:"request_ID,omitempty"`
+	Request_ID int64                  `protobuf:"varint,2,opt,name=request_ID,json=requestID,proto3" json:"request_ID,omitempty"`
 	// Types that are valid to be assigned to KVRequest:
 	//
 	//	*RequestWithMeta_GetRequest
@@ -75,11 +75,11 @@ func (x *RequestWithMeta) GetClient_ID() string {
 	return ""
 }
 
-func (x *RequestWithMeta) GetRequest_ID() string {
+func (x *RequestWithMeta) GetRequest_ID() int64 {
 	if x != nil {
 		return x.Request_ID
 	}
-	return ""
+	return 0
 }
 
 func (x *RequestWithMeta) GetKVRequest() isRequestWithMeta_KVRequest {
@@ -306,7 +306,7 @@ const file_api_raftapplier_raftapplier_proto_rawDesc = "" +
 	"\x0fRequestWithMeta\x12\x1b\n" +
 	"\tclient_ID\x18\x01 \x01(\tR\bclientID\x12\x1d\n" +
 	"\n" +
-	"request_ID\x18\x02 \x01(\tR\trequestID\x124\n" +
+	"request_ID\x18\x02 \x01(\x03R\trequestID\x124\n" +
 	"\vget_request\x18\x03 \x01(\v2\x11.kvrpc.GetRequestH\x00R\n" +
 	"getRequest\x124\n" +
 	"\vput_request\x18\x04 \x01(\v2\x11.kvrpc.PutRequestH\x00R\n" +

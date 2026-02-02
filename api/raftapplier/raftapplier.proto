@@ -8,7 +8,7 @@ import "api/kvrpc/kv.proto";
 
 message RequestWithMeta {
     string client_ID = 1;
-    string request_ID = 2;
+    int64 request_ID = 2;
     oneof KVRequest {
         kvrpc.GetRequest get_request = 3;
         kvrpc.PutRequest put_request = 4;
