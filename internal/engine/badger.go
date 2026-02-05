@@ -127,15 +127,15 @@ func (st *BadgerStorage) CompareAndSwap(key []byte, version uint64, value []byte
 	return item.Version(), nil
 }
 
-func ErrorTranslate(err error) kvpb.StatusCode {
+func ErrorTranslate(err error) kvpb.KVErrorCode {
 	switch err {
 	case nil:
-		return kvpb.StatusCode_OK
+		return kvpb.KVErrorCode_OK
 	case badger.ErrKeyNotFound:
-		return kvpb.StatusCode_KEY_NOT_FOUND
+		return kvpb.KVErrorCode_KEY_NOT_FOUND
 	case badger.ErrConflict:
-		return kvpb.StatusCode_CONFLICT
+		return kvpb.KVErrorCode_CONFLICT
 	default:
-		return kvpb.StatusCode_INTERNAL
+		return kvpb.KVErrorCode_INTERNAL
 	}
 }

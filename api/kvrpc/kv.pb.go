@@ -21,79 +21,67 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type StatusCode int32
+type KVErrorCode int32
 
 const (
-	StatusCode_STATUS_UNSPECIFIED StatusCode = 0
-	StatusCode_OK                 StatusCode = 1  // No error
-	StatusCode_KEY_NOT_FOUND      StatusCode = 2  // ErrNoKey
-	StatusCode_VERSION_MISMATCH   StatusCode = 3  // ErrWrongVersion / ErrVersionMismatch
-	StatusCode_CONFLICT           StatusCode = 4  // ErrConflict (transaction conflict, CAS failure, etc)
-	StatusCode_COMPACTED          StatusCode = 5  // ErrCompacted
-	StatusCode_EXPIRED            StatusCode = 6  // ErrExpired
-	StatusCode_NOT_LEADER         StatusCode = 7  // ErrNotLeader / ErrWrongLeader
-	StatusCode_TIMEOUT            StatusCode = 8  // ErrTimeout
-	StatusCode_OUTDATED           StatusCode = 9  // ErrOutdated
-	StatusCode_UNAVAILABLE        StatusCode = 10 // Service Unavailable
-	StatusCode_INTERNAL           StatusCode = 11 // Internal Error
+	KVErrorCode_STATUS_UNSPECIFIED KVErrorCode = 0
+	KVErrorCode_OK                 KVErrorCode = 1 // No error
+	KVErrorCode_KEY_NOT_FOUND      KVErrorCode = 2 // ErrNoKey
+	KVErrorCode_VERSION_MISMATCH   KVErrorCode = 3 // ErrWrongVersion / ErrVersionMismatch
+	KVErrorCode_CONFLICT           KVErrorCode = 4 // ErrConflict (transaction conflict, CAS failure, etc)
+	KVErrorCode_EXPIRED            KVErrorCode = 5 // ErrExpired
+	KVErrorCode_OUTDATED           KVErrorCode = 6 // ErrOutdated
+	KVErrorCode_INTERNAL           KVErrorCode = 7 // Internal Error
 )
 
-// Enum value maps for StatusCode.
+// Enum value maps for KVErrorCode.
 var (
-	StatusCode_name = map[int32]string{
-		0:  "STATUS_UNSPECIFIED",
-		1:  "OK",
-		2:  "KEY_NOT_FOUND",
-		3:  "VERSION_MISMATCH",
-		4:  "CONFLICT",
-		5:  "COMPACTED",
-		6:  "EXPIRED",
-		7:  "NOT_LEADER",
-		8:  "TIMEOUT",
-		9:  "OUTDATED",
-		10: "UNAVAILABLE",
-		11: "INTERNAL",
+	KVErrorCode_name = map[int32]string{
+		0: "STATUS_UNSPECIFIED",
+		1: "OK",
+		2: "KEY_NOT_FOUND",
+		3: "VERSION_MISMATCH",
+		4: "CONFLICT",
+		5: "EXPIRED",
+		6: "OUTDATED",
+		7: "INTERNAL",
 	}
-	StatusCode_value = map[string]int32{
+	KVErrorCode_value = map[string]int32{
 		"STATUS_UNSPECIFIED": 0,
 		"OK":                 1,
 		"KEY_NOT_FOUND":      2,
 		"VERSION_MISMATCH":   3,
 		"CONFLICT":           4,
-		"COMPACTED":          5,
-		"EXPIRED":            6,
-		"NOT_LEADER":         7,
-		"TIMEOUT":            8,
-		"OUTDATED":           9,
-		"UNAVAILABLE":        10,
-		"INTERNAL":           11,
+		"EXPIRED":            5,
+		"OUTDATED":           6,
+		"INTERNAL":           7,
 	}
 )
 
-func (x StatusCode) Enum() *StatusCode {
-	p := new(StatusCode)
+func (x KVErrorCode) Enum() *KVErrorCode {
+	p := new(KVErrorCode)
 	*p = x
 	return p
 }
 
-func (x StatusCode) String() string {
+func (x KVErrorCode) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (StatusCode) Descriptor() protoreflect.EnumDescriptor {
+func (KVErrorCode) Descriptor() protoreflect.EnumDescriptor {
 	return file_api_kvrpc_kv_proto_enumTypes[0].Descriptor()
 }
 
-func (StatusCode) Type() protoreflect.EnumType {
+func (KVErrorCode) Type() protoreflect.EnumType {
 	return &file_api_kvrpc_kv_proto_enumTypes[0]
 }
 
-func (x StatusCode) Number() protoreflect.EnumNumber {
+func (x KVErrorCode) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use StatusCode.Descriptor instead.
-func (StatusCode) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use KVErrorCode.Descriptor instead.
+func (KVErrorCode) EnumDescriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{0}
 }
 
@@ -421,7 +409,7 @@ type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
+	Status        KVErrorCode            `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.KVErrorCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -470,11 +458,11 @@ func (x *GetResponse) GetVersion() uint64 {
 	return 0
 }
 
-func (x *GetResponse) GetStatus() StatusCode {
+func (x *GetResponse) GetStatus() KVErrorCode {
 	if x != nil {
 		return x.Status
 	}
-	return StatusCode_STATUS_UNSPECIFIED
+	return KVErrorCode_STATUS_UNSPECIFIED
 }
 
 type PutRequest struct {
@@ -532,7 +520,7 @@ func (x *PutRequest) GetValue() []byte {
 type PutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Status        StatusCode             `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
+	Status        KVErrorCode            `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.KVErrorCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -574,11 +562,11 @@ func (x *PutResponse) GetVersion() uint64 {
 	return 0
 }
 
-func (x *PutResponse) GetStatus() StatusCode {
+func (x *PutResponse) GetStatus() KVErrorCode {
 	if x != nil {
 		return x.Status
 	}
-	return StatusCode_STATUS_UNSPECIFIED
+	return KVErrorCode_STATUS_UNSPECIFIED
 }
 
 type DeleteRequest struct {
@@ -627,7 +615,7 @@ func (x *DeleteRequest) GetKey() []byte {
 
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        StatusCode             `protobuf:"varint,1,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
+	Status        KVErrorCode            `protobuf:"varint,1,opt,name=status,proto3,enum=kvrpc.KVErrorCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -662,11 +650,11 @@ func (*DeleteResponse) Descriptor() ([]byte, []int) {
 	return file_api_kvrpc_kv_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *DeleteResponse) GetStatus() StatusCode {
+func (x *DeleteResponse) GetStatus() KVErrorCode {
 	if x != nil {
 		return x.Status
 	}
-	return StatusCode_STATUS_UNSPECIFIED
+	return KVErrorCode_STATUS_UNSPECIFIED
 }
 
 type AppendRequest struct {
@@ -725,7 +713,7 @@ type AppendResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         []byte                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Status        StatusCode             `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
+	Status        KVErrorCode            `protobuf:"varint,3,opt,name=status,proto3,enum=kvrpc.KVErrorCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -774,11 +762,11 @@ func (x *AppendResponse) GetVersion() uint64 {
 	return 0
 }
 
-func (x *AppendResponse) GetStatus() StatusCode {
+func (x *AppendResponse) GetStatus() KVErrorCode {
 	if x != nil {
 		return x.Status
 	}
-	return StatusCode_STATUS_UNSPECIFIED
+	return KVErrorCode_STATUS_UNSPECIFIED
 }
 
 type CASRequest struct {
@@ -844,7 +832,7 @@ func (x *CASRequest) GetValue() []byte {
 type CASResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Status        StatusCode             `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.StatusCode" json:"status,omitempty"`
+	Status        KVErrorCode            `protobuf:"varint,2,opt,name=status,proto3,enum=kvrpc.KVErrorCode" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,11 +874,11 @@ func (x *CASResponse) GetVersion() uint64 {
 	return 0
 }
 
-func (x *CASResponse) GetStatus() StatusCode {
+func (x *CASResponse) GetStatus() KVErrorCode {
 	if x != nil {
 		return x.Status
 	}
-	return StatusCode_STATUS_UNSPECIFIED
+	return KVErrorCode_STATUS_UNSPECIFIED
 }
 
 type MultiRequest struct {
@@ -1002,56 +990,49 @@ const file_api_kvrpc_kv_proto_rawDesc = "" +
 	"KVResponse\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\fR\x03key\"h\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\"i\n" +
 	"\vGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x04R\aversion\x12)\n" +
-	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"4\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x12*\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x12.kvrpc.KVErrorCodeR\x06status\"4\n" +
 	"\n" +
 	"PutRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value\"R\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"S\n" +
 	"\vPutResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\x12)\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"!\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\x12*\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x12.kvrpc.KVErrorCodeR\x06status\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\fR\x03key\";\n" +
-	"\x0eDeleteResponse\x12)\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"9\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\"<\n" +
+	"\x0eDeleteResponse\x12*\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x12.kvrpc.KVErrorCodeR\x06status\"9\n" +
 	"\rAppendRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x16\n" +
-	"\x06suffix\x18\x02 \x01(\fR\x06suffix\"k\n" +
+	"\x06suffix\x18\x02 \x01(\fR\x06suffix\"l\n" +
 	"\x0eAppendResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x04R\aversion\x12)\n" +
-	"\x06status\x18\x03 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"_\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x12*\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x12.kvrpc.KVErrorCodeR\x06status\"_\n" +
 	"\n" +
 	"CASRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12)\n" +
 	"\x10expected_version\x18\x02 \x01(\x04R\x0fexpectedVersion\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\fR\x05value\"R\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\"S\n" +
 	"\vCASResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\x12)\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x11.kvrpc.StatusCodeR\x06status\"\"\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\x12*\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x12.kvrpc.KVErrorCodeR\x06status\"\"\n" +
 	"\fMultiRequest\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\fR\x04keys\"\x0f\n" +
-	"\rMultiResponse*\xc9\x01\n" +
-	"\n" +
-	"StatusCode\x12\x16\n" +
+	"\rMultiResponse*\x8d\x01\n" +
+	"\vKVErrorCode\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x06\n" +
 	"\x02OK\x10\x01\x12\x11\n" +
 	"\rKEY_NOT_FOUND\x10\x02\x12\x14\n" +
 	"\x10VERSION_MISMATCH\x10\x03\x12\f\n" +
-	"\bCONFLICT\x10\x04\x12\r\n" +
-	"\tCOMPACTED\x10\x05\x12\v\n" +
-	"\aEXPIRED\x10\x06\x12\x0e\n" +
-	"\n" +
-	"NOT_LEADER\x10\a\x12\v\n" +
-	"\aTIMEOUT\x10\b\x12\f\n" +
-	"\bOUTDATED\x10\t\x12\x0f\n" +
-	"\vUNAVAILABLE\x10\n" +
-	"\x12\f\n" +
-	"\bINTERNAL\x10\v2>\n" +
+	"\bCONFLICT\x10\x04\x12\v\n" +
+	"\aEXPIRED\x10\x05\x12\f\n" +
+	"\bOUTDATED\x10\x06\x12\f\n" +
+	"\bINTERNAL\x10\a2>\n" +
 	"\bKeyValue\x122\n" +
 	"\aExecute\x12\x16.kvrpc.RequestWithMeta\x1a\x0f.kvrpc.ResponseB3Z1github.com/DecarbonizedGlucose/rkv/api/kvrpc;kvpbb\x06proto3"
 
@@ -1070,7 +1051,7 @@ func file_api_kvrpc_kv_proto_rawDescGZIP() []byte {
 var file_api_kvrpc_kv_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_api_kvrpc_kv_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_api_kvrpc_kv_proto_goTypes = []any{
-	(StatusCode)(0),         // 0: kvrpc.StatusCode
+	(KVErrorCode)(0),        // 0: kvrpc.KVErrorCode
 	(*RequestWithMeta)(nil), // 1: kvrpc.RequestWithMeta
 	(*Response)(nil),        // 2: kvrpc.Response
 	(*GetRequest)(nil),      // 3: kvrpc.GetRequest
@@ -1097,11 +1078,11 @@ var file_api_kvrpc_kv_proto_depIdxs = []int32{
 	8,  // 7: kvrpc.Response.delete_response:type_name -> kvrpc.DeleteResponse
 	10, // 8: kvrpc.Response.append_response:type_name -> kvrpc.AppendResponse
 	12, // 9: kvrpc.Response.cas_response:type_name -> kvrpc.CASResponse
-	0,  // 10: kvrpc.GetResponse.status:type_name -> kvrpc.StatusCode
-	0,  // 11: kvrpc.PutResponse.status:type_name -> kvrpc.StatusCode
-	0,  // 12: kvrpc.DeleteResponse.status:type_name -> kvrpc.StatusCode
-	0,  // 13: kvrpc.AppendResponse.status:type_name -> kvrpc.StatusCode
-	0,  // 14: kvrpc.CASResponse.status:type_name -> kvrpc.StatusCode
+	0,  // 10: kvrpc.GetResponse.status:type_name -> kvrpc.KVErrorCode
+	0,  // 11: kvrpc.PutResponse.status:type_name -> kvrpc.KVErrorCode
+	0,  // 12: kvrpc.DeleteResponse.status:type_name -> kvrpc.KVErrorCode
+	0,  // 13: kvrpc.AppendResponse.status:type_name -> kvrpc.KVErrorCode
+	0,  // 14: kvrpc.CASResponse.status:type_name -> kvrpc.KVErrorCode
 	1,  // 15: kvrpc.KeyValue.Execute:input_type -> kvrpc.RequestWithMeta
 	2,  // 16: kvrpc.KeyValue.Execute:output_type -> kvrpc.Response
 	16, // [16:17] is the sub-list for method output_type

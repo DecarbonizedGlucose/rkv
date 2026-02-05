@@ -113,23 +113,23 @@ func GenOutdatedResponse() *kvpb.Response {
 	switch res := response.KVResponse.(type) {
 	case *kvpb.Response_GetResponse:
 		res.GetResponse = &kvpb.GetResponse{
-			Status: kvpb.StatusCode_OUTDATED,
+			Status: kvpb.KVErrorCode_OUTDATED,
 		}
 	case *kvpb.Response_PutResponse:
 		res.PutResponse = &kvpb.PutResponse{
-			Status: kvpb.StatusCode_OUTDATED,
+			Status: kvpb.KVErrorCode_OUTDATED,
 		}
 	case *kvpb.Response_DeleteResponse:
 		res.DeleteResponse = &kvpb.DeleteResponse{
-			Status: kvpb.StatusCode_OUTDATED,
+			Status: kvpb.KVErrorCode_OUTDATED,
 		}
 	case *kvpb.Response_AppendResponse:
 		res.AppendResponse = &kvpb.AppendResponse{
-			Status: kvpb.StatusCode_OUTDATED,
+			Status: kvpb.KVErrorCode_OUTDATED,
 		}
 	case *kvpb.Response_CasResponse:
 		res.CasResponse = &kvpb.CASResponse{
-			Status: kvpb.StatusCode_OUTDATED,
+			Status: kvpb.KVErrorCode_OUTDATED,
 		}
 	}
 	return response

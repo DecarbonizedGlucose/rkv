@@ -12,20 +12,16 @@ service KeyValue {
 
 // Errors
 
-enum StatusCode {
+enum KVErrorCode {
     STATUS_UNSPECIFIED = 0;
 
     OK                     = 1;     // No error
     KEY_NOT_FOUND          = 2;     // ErrNoKey
     VERSION_MISMATCH       = 3;     // ErrWrongVersion / ErrVersionMismatch
     CONFLICT               = 4;     // ErrConflict (transaction conflict, CAS failure, etc)
-    COMPACTED              = 5;     // ErrCompacted
-    EXPIRED                = 6;     // ErrExpired
-    NOT_LEADER             = 7;     // ErrNotLeader / ErrWrongLeader
-    TIMEOUT                = 8;     // ErrTimeout
-    OUTDATED               = 9;     // ErrOutdated
-    UNAVAILABLE            = 10;    // Service Unavailable
-    INTERNAL               = 11;    // Internal Error
+    EXPIRED                = 5;     // ErrExpired
+    OUTDATED               = 6;     // ErrOutdated
+    INTERNAL               = 7;     // Internal Error
 }
 
 // Requests and Responses
@@ -59,7 +55,7 @@ message GetRequest {
 message GetResponse {
     bytes value = 1;
     uint64 version = 2;
-    StatusCode status = 3;
+    KVErrorCode status = 3;
 }
 
 message PutRequest {
@@ -69,7 +65,7 @@ message PutRequest {
 
 message PutResponse {
     uint64 version = 1;
-    StatusCode status = 2;
+    KVErrorCode status = 2;
 }
 
 message DeleteRequest {
@@ -77,7 +73,7 @@ message DeleteRequest {
 }
 
 message DeleteResponse {
-    StatusCode status = 1;
+    KVErrorCode status = 1;
 }
 
 message AppendRequest {
@@ -88,7 +84,7 @@ message AppendRequest {
 message AppendResponse {
     bytes value = 1;
     uint64 version = 2;
-    StatusCode status = 3;
+    KVErrorCode status = 3;
 }
 
 message CASRequest {
@@ -99,7 +95,7 @@ message CASRequest {
 
 message CASResponse {
     uint64 version = 1;
-    StatusCode status = 2;
+    KVErrorCode status = 2;
 }
 
 

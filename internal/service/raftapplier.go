@@ -6,13 +6,14 @@ import (
 	"time"
 
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
-	rapb "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
 	"github.com/DecarbonizedGlucose/rkv/internal/raft"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type kvexecutor interface {
-	Execute(req *rapb.RequestWithMeta) *rapb.Response
+	Execute(req *kvpb.RequestWithMeta) *kvpb.Response
 	Snapshot() []byte
 	Restore(snapshot []byte)
 }
@@ -24,7 +25,7 @@ type RaftApplier struct {
 	maxraftstate int
 	exec         kvexecutor
 	shutdown     atomic.Bool
-	waitingCmds  map[int]chan *rapb.Response
+	waitingCmds  map[int]chan *kvpb.Response
 }
 
 func MakeRaftApplier(
@@ -36,7 +37,7 @@ func MakeRaftApplier(
 		maxraftstate: maxraftstate,
 		applyCh:      make(chan *types.ApplyMsg),
 		exec:         exec,
-		waitingCmds:  make(map[int]chan *rapb.Response),
+		waitingCmds:  make(map[int]chan *kvpb.Response),
 	}
 	ra.shutdown.Store(false)
 	ra.rf = rf
@@ -52,38 +53,38 @@ func (ra *RaftApplier) Kill() {
 	ra.rf.Kill()
 }
 
-func (ra *RaftApplier) Submit(req *rapb.RequestWithMeta) (res *rapb.Response, err kvpb.StatusCode) {
+func (ra *RaftApplier) Submit(req *kvpb.RequestWithMeta) (res *kvpb.Response, err error) {
 	if ra.shutdown.Load() {
-		return nil, kvpb.StatusCode_NOT_LEADER
+		return nil, status.Error(codes.Unavailable, "server is shutting down")
 	}
 
 	index, term, isLeader := ra.rf.Start(req)
 	if !isLeader {
-		return nil, kvpb.StatusCode_NOT_LEADER
+		return nil, status.Error(codes.FailedPrecondition, "not the leader")
 	}
 
-	ra.waitingCmds[index] = make(chan *rapb.Response)
+	ra.waitingCmds[index] = make(chan *kvpb.Response)
 
-	result, err := func() (*rapb.Response, kvpb.StatusCode) {
+	result, err := func() (*kvpb.Response, error) {
 		timer := time.NewTimer(1500 * time.Millisecond)
 		defer timer.Stop()
 		for {
 			if ra.shutdown.Load() {
 				// this server peer is dead
-				return nil, kvpb.StatusCode_NOT_LEADER
+				return nil, status.Error(codes.FailedPrecondition, "not the leader")
 			}
 			select {
 			case <-timer.C:
 				// timeout
-				return nil, kvpb.StatusCode_TIMEOUT
+				return nil, status.Error(codes.DeadlineExceeded, "timeout")
 			case <-time.After(300 * time.Millisecond):
 				currentTerm, stillLeader := ra.rf.GetState()
 				if !stillLeader || currentTerm != term {
 					// leader changed
-					return nil, kvpb.StatusCode_NOT_LEADER
+					return nil, status.Error(codes.FailedPrecondition, "not the leader")
 				}
 			case res := <-ra.waitingCmds[index]:
-				return res, kvpb.StatusCode_OK
+				return res, nil
 			}
 		}
 	}()
