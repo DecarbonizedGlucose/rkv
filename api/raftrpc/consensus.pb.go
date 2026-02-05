@@ -7,7 +7,7 @@
 package raftrpcpb
 
 import (
-	raftapplier "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
+	kvrpc "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -23,9 +23,9 @@ const (
 )
 
 type LogEntry struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Term          int64                        `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
-	Log           *raftapplier.RequestWithMeta `protobuf:"bytes,2,opt,name=log,proto3" json:"log,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          int64                  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Log           *kvrpc.RequestWithMeta `protobuf:"bytes,2,opt,name=log,proto3" json:"log,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,7 +67,7 @@ func (x *LogEntry) GetTerm() int64 {
 	return 0
 }
 
-func (x *LogEntry) GetLog() *raftapplier.RequestWithMeta {
+func (x *LogEntry) GetLog() *kvrpc.RequestWithMeta {
 	if x != nil {
 		return x.Log
 	}
@@ -350,10 +350,10 @@ var File_api_raftrpc_consensus_proto protoreflect.FileDescriptor
 
 const file_api_raftrpc_consensus_proto_rawDesc = "" +
 	"\n" +
-	"\x1bapi/raftrpc/consensus.proto\x12\araftrpc\x1a!api/raftapplier/raftapplier.proto\"N\n" +
+	"\x1bapi/raftrpc/consensus.proto\x12\araftrpc\x1a\x12api/kvrpc/kv.proto\"H\n" +
 	"\bLogEntry\x12\x12\n" +
-	"\x04term\x18\x01 \x01(\x03R\x04term\x12.\n" +
-	"\x03log\x18\x02 \x01(\v2\x1c.raftapplier.RequestWithMetaR\x03log\"\x95\x01\n" +
+	"\x04term\x18\x01 \x01(\x03R\x04term\x12(\n" +
+	"\x03log\x18\x02 \x01(\v2\x16.kvrpc.RequestWithMetaR\x03log\"\x95\x01\n" +
 	"\x12RequestVoteRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x03R\x04term\x12!\n" +
 	"\fcandidate_id\x18\x02 \x01(\x03R\vcandidateId\x12$\n" +
@@ -392,15 +392,15 @@ func file_api_raftrpc_consensus_proto_rawDescGZIP() []byte {
 
 var file_api_raftrpc_consensus_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_api_raftrpc_consensus_proto_goTypes = []any{
-	(*LogEntry)(nil),                    // 0: raftrpc.LogEntry
-	(*RequestVoteRequest)(nil),          // 1: raftrpc.RequestVoteRequest
-	(*RequestVoteResponse)(nil),         // 2: raftrpc.RequestVoteResponse
-	(*AppendEntriesRequest)(nil),        // 3: raftrpc.AppendEntriesRequest
-	(*AppendEntriesResponse)(nil),       // 4: raftrpc.AppendEntriesResponse
-	(*raftapplier.RequestWithMeta)(nil), // 5: raftapplier.RequestWithMeta
+	(*LogEntry)(nil),              // 0: raftrpc.LogEntry
+	(*RequestVoteRequest)(nil),    // 1: raftrpc.RequestVoteRequest
+	(*RequestVoteResponse)(nil),   // 2: raftrpc.RequestVoteResponse
+	(*AppendEntriesRequest)(nil),  // 3: raftrpc.AppendEntriesRequest
+	(*AppendEntriesResponse)(nil), // 4: raftrpc.AppendEntriesResponse
+	(*kvrpc.RequestWithMeta)(nil), // 5: kvrpc.RequestWithMeta
 }
 var file_api_raftrpc_consensus_proto_depIdxs = []int32{
-	5, // 0: raftrpc.LogEntry.log:type_name -> raftapplier.RequestWithMeta
+	5, // 0: raftrpc.LogEntry.log:type_name -> kvrpc.RequestWithMeta
 	0, // 1: raftrpc.AppendEntriesRequest.entries:type_name -> raftrpc.LogEntry
 	1, // 2: raftrpc.RaftConsensus.RequestVote:input_type -> raftrpc.RequestVoteRequest
 	3, // 3: raftrpc.RaftConsensus.AppendEntries:input_type -> raftrpc.AppendEntriesRequest

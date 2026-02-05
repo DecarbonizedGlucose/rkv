@@ -4,7 +4,7 @@ option go_package = "github.com/DecarbonizedGlucose/rkv/api/raftrpc;raftrpcpb";
 
 package raftrpc;
 
-import "api/raftapplier/raftapplier.proto";
+import "api/kvrpc/kv.proto";
 
 service RaftConsensus {
     rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse);
@@ -13,7 +13,7 @@ service RaftConsensus {
 
 message LogEntry {
     int64 term = 1;
-    raftapplier.RequestWithMeta log = 2;
+    kvrpc.RequestWithMeta log = 2;
 }
 
 message RequestVoteRequest {

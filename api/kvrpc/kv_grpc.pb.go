@@ -19,22 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KeyValue_Get_FullMethodName    = "/kvrpc.KeyValue/Get"
-	KeyValue_Put_FullMethodName    = "/kvrpc.KeyValue/Put"
-	KeyValue_Delete_FullMethodName = "/kvrpc.KeyValue/Delete"
-	KeyValue_Append_FullMethodName = "/kvrpc.KeyValue/Append"
-	KeyValue_CAS_FullMethodName    = "/kvrpc.KeyValue/CAS"
+	KeyValue_Execute_FullMethodName = "/kvrpc.KeyValue/Execute"
 )
 
 // KeyValueClient is the client API for KeyValue service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type KeyValueClient interface {
-	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
-	Put(ctx context.Context, in *PutRequest, opts ...grpc.CallOption) (*PutResponse, error)
-	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
-	Append(ctx context.Context, in *AppendRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	CAS(ctx context.Context, in *CASRequest, opts ...grpc.CallOption) (*CASResponse, error)
+	Execute(ctx context.Context, in *RequestWithMeta, opts ...grpc.CallOption) (*Response, error)
 }
 
 type keyValueClient struct {
@@ -45,50 +37,10 @@ func NewKeyValueClient(cc grpc.ClientConnInterface) KeyValueClient {
 	return &keyValueClient{cc}
 }
 
-func (c *keyValueClient) Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error) {
+func (c *keyValueClient) Execute(ctx context.Context, in *RequestWithMeta, opts ...grpc.CallOption) (*Response, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetResponse)
-	err := c.cc.Invoke(ctx, KeyValue_Get_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyValueClient) Put(ctx context.Context, in *PutRequest, opts ...grpc.CallOption) (*PutResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PutResponse)
-	err := c.cc.Invoke(ctx, KeyValue_Put_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyValueClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DeleteResponse)
-	err := c.cc.Invoke(ctx, KeyValue_Delete_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyValueClient) Append(ctx context.Context, in *AppendRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, KeyValue_Append_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyValueClient) CAS(ctx context.Context, in *CASRequest, opts ...grpc.CallOption) (*CASResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CASResponse)
-	err := c.cc.Invoke(ctx, KeyValue_CAS_FullMethodName, in, out, cOpts...)
+	out := new(Response)
+	err := c.cc.Invoke(ctx, KeyValue_Execute_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,11 +51,7 @@ func (c *keyValueClient) CAS(ctx context.Context, in *CASRequest, opts ...grpc.C
 // All implementations must embed UnimplementedKeyValueServer
 // for forward compatibility.
 type KeyValueServer interface {
-	Get(context.Context, *GetRequest) (*GetResponse, error)
-	Put(context.Context, *PutRequest) (*PutResponse, error)
-	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
-	Append(context.Context, *AppendRequest) (*AppendResponse, error)
-	CAS(context.Context, *CASRequest) (*CASResponse, error)
+	Execute(context.Context, *RequestWithMeta) (*Response, error)
 	mustEmbedUnimplementedKeyValueServer()
 }
 
@@ -114,20 +62,8 @@ type KeyValueServer interface {
 // pointer dereference when methods are called.
 type UnimplementedKeyValueServer struct{}
 
-func (UnimplementedKeyValueServer) Get(context.Context, *GetRequest) (*GetResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Get not implemented")
-}
-func (UnimplementedKeyValueServer) Put(context.Context, *PutRequest) (*PutResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Put not implemented")
-}
-func (UnimplementedKeyValueServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Delete not implemented")
-}
-func (UnimplementedKeyValueServer) Append(context.Context, *AppendRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Append not implemented")
-}
-func (UnimplementedKeyValueServer) CAS(context.Context, *CASRequest) (*CASResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CAS not implemented")
+func (UnimplementedKeyValueServer) Execute(context.Context, *RequestWithMeta) (*Response, error) {
+	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
 }
 func (UnimplementedKeyValueServer) mustEmbedUnimplementedKeyValueServer() {}
 func (UnimplementedKeyValueServer) testEmbeddedByValue()                  {}
@@ -150,92 +86,20 @@ func RegisterKeyValueServer(s grpc.ServiceRegistrar, srv KeyValueServer) {
 	s.RegisterService(&KeyValue_ServiceDesc, srv)
 }
 
-func _KeyValue_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetRequest)
+func _KeyValue_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestWithMeta)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(KeyValueServer).Get(ctx, in)
+		return srv.(KeyValueServer).Execute(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: KeyValue_Get_FullMethodName,
+		FullMethod: KeyValue_Execute_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyValueServer).Get(ctx, req.(*GetRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyValue_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PutRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyValueServer).Put(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyValue_Put_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyValueServer).Put(ctx, req.(*PutRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyValue_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyValueServer).Delete(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyValue_Delete_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyValueServer).Delete(ctx, req.(*DeleteRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyValue_Append_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyValueServer).Append(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyValue_Append_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyValueServer).Append(ctx, req.(*AppendRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyValue_CAS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CASRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyValueServer).CAS(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyValue_CAS_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyValueServer).CAS(ctx, req.(*CASRequest))
+		return srv.(KeyValueServer).Execute(ctx, req.(*RequestWithMeta))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -248,24 +112,8 @@ var KeyValue_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*KeyValueServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Get",
-			Handler:    _KeyValue_Get_Handler,
-		},
-		{
-			MethodName: "Put",
-			Handler:    _KeyValue_Put_Handler,
-		},
-		{
-			MethodName: "Delete",
-			Handler:    _KeyValue_Delete_Handler,
-		},
-		{
-			MethodName: "Append",
-			Handler:    _KeyValue_Append_Handler,
-		},
-		{
-			MethodName: "CAS",
-			Handler:    _KeyValue_CAS_Handler,
+			MethodName: "Execute",
+			Handler:    _KeyValue_Execute_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

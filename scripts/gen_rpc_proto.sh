@@ -14,13 +14,6 @@ protoc \
     api/raftrpc/consensus.proto \
     api/raftrpc/persistence.proto
 
-# generate raft applier pb files
-protoc \
-    --proto_path=. \
-    --go_out=. \
-    --go_opt=paths=source_relative \
-    api/raftapplier/raftapplier.proto
-
 # generate kvrpc pb files
 protoc \
     --proto_path=. \

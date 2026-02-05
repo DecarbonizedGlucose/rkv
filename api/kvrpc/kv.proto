@@ -7,12 +7,7 @@ package kvrpc;
 // Service
 
 service KeyValue {
-    rpc Get(GetRequest) returns (GetResponse);
-    rpc Put(PutRequest) returns (PutResponse);
-    rpc Delete(DeleteRequest) returns (DeleteResponse);
-    rpc Append(AppendRequest) returns (AppendResponse);
-    rpc CAS(CASRequest) returns (CASResponse);
-    // rpc MultiGet
+    rpc Execute(RequestWithMeta) returns (Response);
 }
 
 // Errors
@@ -34,6 +29,28 @@ enum StatusCode {
 }
 
 // Requests and Responses
+
+message RequestWithMeta {
+    string client_ID = 1;
+    int64 request_ID = 2;
+    oneof KVRequest {
+        GetRequest get_request = 3;
+        PutRequest put_request = 4;
+        DeleteRequest delete_request = 5;
+        AppendRequest append_request = 6;
+        CASRequest cas_request = 7;
+    }
+}
+
+message Response {
+    oneof KVResponse {
+        GetResponse get_response = 1;
+        PutResponse put_response = 2;
+        DeleteResponse delete_response = 3;
+        AppendResponse append_response = 4;
+        CASResponse cas_response = 5;
+    }
+}
 
 message GetRequest {
     bytes key = 1;

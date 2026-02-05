@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	rapb "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
+	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	raftpb "github.com/DecarbonizedGlucose/rkv/api/raftrpc"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
 	"github.com/DecarbonizedGlucose/rkv/internal/utils"
@@ -86,7 +86,7 @@ func MakeRaft(peers []*Peer, me int, persister *Persister, applyCh chan *types.A
 
 /* ==================== Life and State ==================== */
 
-func (rf *Raft) Start(command *rapb.RequestWithMeta) (int, int64, bool) {
+func (rf *Raft) Start(command *kvpb.RequestWithMeta) (int, int64, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	if rf.state != Leader {

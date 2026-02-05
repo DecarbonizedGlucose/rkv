@@ -2,13 +2,12 @@ package service
 
 import (
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
-	rapb "github.com/DecarbonizedGlucose/rkv/api/raftapplier"
 	eg "github.com/DecarbonizedGlucose/rkv/internal/engine"
 )
 
 type SessionValue struct {
 	lastRequestID int64
-	lastResponse  *rapb.Response
+	lastResponse  *kvpb.Response
 }
 
 type KVExecutor struct {
@@ -23,30 +22,30 @@ func MakeKVExecutor() *KVExecutor {
 	}
 }
 
-func (exec *KVExecutor) Execute(reqM *rapb.RequestWithMeta) *rapb.Response {
+func (exec *KVExecutor) Execute(reqM *kvpb.RequestWithMeta) *kvpb.Response {
 	response, dup := exec.IsDuplicate(reqM.Client_ID, reqM.Request_ID)
 	if dup {
 		return response
 	}
 	switch req := reqM.KVRequest.(type) {
-	case *rapb.RequestWithMeta_GetRequest:
-		response.KVResponse = &rapb.Response_GetResponse{
+	case *kvpb.RequestWithMeta_GetRequest:
+		response.KVResponse = &kvpb.Response_GetResponse{
 			GetResponse: exec.Get(req.GetRequest),
 		}
-	case *rapb.RequestWithMeta_PutRequest:
-		response.KVResponse = &rapb.Response_PutResponse{
+	case *kvpb.RequestWithMeta_PutRequest:
+		response.KVResponse = &kvpb.Response_PutResponse{
 			PutResponse: exec.Put(req.PutRequest),
 		}
-	case *rapb.RequestWithMeta_DeleteRequest:
-		response.KVResponse = &rapb.Response_DeleteResponse{
+	case *kvpb.RequestWithMeta_DeleteRequest:
+		response.KVResponse = &kvpb.Response_DeleteResponse{
 			DeleteResponse: exec.Delete(req.DeleteRequest),
 		}
-	case *rapb.RequestWithMeta_AppendRequest:
-		response.KVResponse = &rapb.Response_AppendResponse{
+	case *kvpb.RequestWithMeta_AppendRequest:
+		response.KVResponse = &kvpb.Response_AppendResponse{
 			AppendResponse: exec.Append(req.AppendRequest),
 		}
-	case *rapb.RequestWithMeta_CasRequest:
-		response.KVResponse = &rapb.Response_CasResponse{
+	case *kvpb.RequestWithMeta_CasRequest:
+		response.KVResponse = &kvpb.Response_CasResponse{
 			CasResponse: exec.CompareAndSwap(req.CasRequest),
 		}
 	}
@@ -109,26 +108,26 @@ func (exec *KVExecutor) CompareAndSwap(req *kvpb.CASRequest) *kvpb.CASResponse {
 
 // Deduplication
 
-func GenOutdatedResponse() *rapb.Response {
-	response := &rapb.Response{}
+func GenOutdatedResponse() *kvpb.Response {
+	response := &kvpb.Response{}
 	switch res := response.KVResponse.(type) {
-	case *rapb.Response_GetResponse:
+	case *kvpb.Response_GetResponse:
 		res.GetResponse = &kvpb.GetResponse{
 			Status: kvpb.StatusCode_OUTDATED,
 		}
-	case *rapb.Response_PutResponse:
+	case *kvpb.Response_PutResponse:
 		res.PutResponse = &kvpb.PutResponse{
 			Status: kvpb.StatusCode_OUTDATED,
 		}
-	case *rapb.Response_DeleteResponse:
+	case *kvpb.Response_DeleteResponse:
 		res.DeleteResponse = &kvpb.DeleteResponse{
 			Status: kvpb.StatusCode_OUTDATED,
 		}
-	case *rapb.Response_AppendResponse:
+	case *kvpb.Response_AppendResponse:
 		res.AppendResponse = &kvpb.AppendResponse{
 			Status: kvpb.StatusCode_OUTDATED,
 		}
-	case *rapb.Response_CasResponse:
+	case *kvpb.Response_CasResponse:
 		res.CasResponse = &kvpb.CASResponse{
 			Status: kvpb.StatusCode_OUTDATED,
 		}
@@ -136,13 +135,13 @@ func GenOutdatedResponse() *rapb.Response {
 	return response
 }
 
-func (exec *KVExecutor) IsDuplicate(clientID string, requestID int64) (*rapb.Response, bool) {
+func (exec *KVExecutor) IsDuplicate(clientID string, requestID int64) (*kvpb.Response, bool) {
 	session, exists := exec.sessions[clientID]
 	if !exists {
-		return &rapb.Response{}, false
+		return &kvpb.Response{}, false
 	}
 	if requestID > session.lastRequestID {
-		return &rapb.Response{}, false
+		return &kvpb.Response{}, false
 	}
 	if requestID == session.lastRequestID {
 		return session.lastResponse, true
