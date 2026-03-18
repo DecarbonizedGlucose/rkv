@@ -5,6 +5,7 @@ import (
 
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	eg "github.com/DecarbonizedGlucose/rkv/internal/engine"
+	"github.com/DecarbonizedGlucose/rkv/internal/types"
 )
 
 type SessionValue struct {
@@ -17,11 +18,15 @@ type KVExecutor struct {
 	sessions map[string]*SessionValue
 }
 
-func MakeKVExecutor() *KVExecutor {
+func MakeKVExecutor(cfg *types.ServerConfig) *KVExecutor {
 	return &KVExecutor{
-		engine:   eg.MakeStorage(),
+		engine:   eg.MakeStorage(&cfg.StoragePath),
 		sessions: make(map[string]*SessionValue),
 	}
+}
+
+func (exec *KVExecutor) SafeStop() {
+	exec.engine.Stop()
 }
 
 func (exec *KVExecutor) Execute(reqM *kvpb.RequestWithMeta) *kvpb.Response {

@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"bytes"
 	"log"
+	"sync"
 
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	"github.com/dgraph-io/badger"
@@ -10,23 +12,56 @@ import (
 // Implementation of the "Storage" interface
 type BadgerStorage struct {
 	// no mutex needed, Badger is thread-safe
-	db *badger.DB
+	db     *badger.DB
+	mu     sync.RWMutex
+	termCh chan struct{}
 }
 
-func MakeStorage() Storage {
+func MakeStorage(sp *string) Storage {
 	st := &BadgerStorage{}
-	// Open the database under /tmp/badger
 	// Automatically create it if not exists
-	gdb, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	gdb, err := badger.Open(badger.DefaultOptions(*sp).WithSyncWrites(true))
 	if err != nil {
 		log.Fatal(err)
 	}
 	st.db = gdb
-	// Remember to call db.Close()
+	st.termCh = make(chan struct{})
+	go st.ListenSafeTerm()
 	return st
 }
 
+func (st *BadgerStorage) Stop() {
+	st.termCh <- struct{}{}
+}
+
+func (st *BadgerStorage) ListenSafeTerm() {
+	<-st.termCh
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.db.Close()
+}
+
+func (st *BadgerStorage) Snapshot() (*bytes.Buffer, error) {
+	st.mu.RLock()
+	defer st.mu.Unlock()
+	writer := new(bytes.Buffer)
+	_, err := st.db.Backup(writer, 0) // returns with timestamp (version) which we do not need
+	if err != nil {
+		return nil, err
+	}
+	return writer, nil
+}
+
+func (st *BadgerStorage) Restore(buf *bytes.Buffer) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	err := st.db.Load(buf, 16)
+	return err
+}
+
 func (st *BadgerStorage) Get(key []byte) ([]byte, uint64, error) {
+	st.mu.RLock()
+	defer st.mu.Unlock()
 	txn := st.db.NewTransaction(false)
 	defer txn.Discard()
 	item, err := txn.Get(key)
@@ -42,6 +77,8 @@ func (st *BadgerStorage) Get(key []byte) ([]byte, uint64, error) {
 }
 
 func (st *BadgerStorage) Put(key, value []byte) (uint64, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	txn := st.db.NewTransaction(true)
 	defer txn.Commit()
 	err := txn.Set(key, value)
@@ -56,6 +93,8 @@ func (st *BadgerStorage) Put(key, value []byte) (uint64, error) {
 }
 
 func (st *BadgerStorage) Delete(key []byte) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	txn := st.db.NewTransaction(true)
 	defer txn.Commit()
 	err := txn.Delete(key)
@@ -63,6 +102,8 @@ func (st *BadgerStorage) Delete(key []byte) error {
 }
 
 func (st *BadgerStorage) Append(key, suffix []byte) ([]byte, uint64, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	txn := st.db.NewTransaction(true)
 	defer txn.Commit()
 	item, err := txn.Get(key)
@@ -93,6 +134,8 @@ func (st *BadgerStorage) Append(key, suffix []byte) ([]byte, uint64, error) {
 }
 
 func (st *BadgerStorage) CompareAndSwap(key []byte, version uint64, value []byte) (uint64, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	txn := st.db.NewTransaction(true)
 	defer txn.Commit()
 	item, err := txn.Get(key)
