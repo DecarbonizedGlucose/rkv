@@ -1,14 +1,18 @@
 package raft
 
 import (
+	"bytes"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	raftpb "github.com/DecarbonizedGlucose/rkv/api/raftrpc"
+	persistpb "github.com/DecarbonizedGlucose/rkv/internal/raft/proto"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
 	"github.com/DecarbonizedGlucose/rkv/internal/utils"
+	"google.golang.org/protobuf/proto"
 )
 
 /* ==================== Definition and Construction ==================== */
@@ -71,8 +75,7 @@ func MakeRaft(peers []*Peer, me int, persister *Persister, applyCh chan *types.A
 	rf.resetHBTimeoutCh = make(chan struct{}, 1)
 	rf.applyCh = applyCh
 	rf.applyCond = sync.NewCond(&rf.mu)
-	// Read Snapshot
-	// rf.readPersist(persister.ReadRaftState)
+	rf.readPersist()
 	rf.commitIndex = max(rf.commitIndex, rf.lastIncludedIndex)
 	rf.lastApplied = max(rf.lastApplied, rf.lastIncludedIndex)
 
@@ -97,8 +100,7 @@ func (rf *Raft) Start(command *kvpb.RequestWithMeta) (int, int64, bool) {
 	term := rf.currentTerm
 	newLog := &raftpb.LogEntry{Log: command, Term: term}
 	rf.log = append(rf.log, newLog)
-	// TODO
-	// rf.persist()
+	rf.persist()
 	rf.nextIndex[rf.me] = index + 1
 	rf.matchIndex[rf.me] = index
 	return index, term, true
@@ -160,8 +162,7 @@ func (rf *Raft) RequestVote(
 		rf.votedFor = int(req.CandidateId)
 		reply.VoteGranted = true
 		rf.resetElectionTimer()
-		// TODO
-		// rf.persist()
+		rf.persist()
 	}
 }
 
@@ -279,8 +280,7 @@ func (rf *Raft) AppendEntries(
 			break
 		}
 	}
-	// TODO
-	// rf.persist()
+	rf.persist()
 	// update commit index
 	if req.LeaderCommit > int64(rf.commitIndex) {
 		rf.commitIndex = min(int(req.LeaderCommit), rf.getLastLogIndex())
@@ -394,6 +394,49 @@ func (rf *Raft) broadcastHeartbeat() {
 
 /* ==================== Persistence ==================== */
 
+func (rf *Raft) encodedState() *bytes.Buffer {
+	state := &persistpb.PersistState{
+		CurrentTerm:       rf.currentTerm,
+		VotedFor:          int64(rf.votedFor),
+		LastIncludedIndex: int64(rf.lastIncludedIndex),
+		LastIncludedTerm:  rf.lastIncludedTerm,
+		Log:               rf.log,
+	}
+	data, err := proto.Marshal(state)
+	if err != nil {
+		log.Fatalln(err)
+		// TODO battle this error
+		return nil
+	}
+	return bytes.NewBuffer(data)
+}
+
+func (rf *Raft) persist() {
+	// Here has error info, fix it later  TODO
+	rf.persister.Save(rf.encodedState(), nil)
+}
+
+func (rf *Raft) persistWithSnapshot(snapshotBuf *bytes.Buffer) {
+	rf.persister.Save(rf.encodedState(), snapshotBuf)
+}
+
+// restore previously persisted state.
+func (rf *Raft) readPersist() {
+	buf, err := rf.persister.ReadRaftState()
+	if err != nil || buf == nil {
+		return
+	}
+	state := &persistpb.PersistState{}
+	if err := proto.Unmarshal(buf.Bytes(), state); err != nil {
+		return
+	}
+	rf.currentTerm = state.CurrentTerm
+	rf.votedFor = int(state.VotedFor)
+	rf.lastIncludedIndex = int(state.LastIncludedIndex)
+	rf.lastIncludedTerm = state.LastIncludedTerm
+	rf.log = state.Log
+}
+
 func (rf *Raft) InstallSnapshot(
 	req *raftpb.InstallSnapshotRequest,
 	res *raftpb.InstallSnapshotResponse,
@@ -428,9 +471,8 @@ func (rf *Raft) InstallSnapshot(
 	rf.lastIncludedTerm = req.LastIncludedTerm
 	rf.commitIndex = max(rf.commitIndex, int(req.LastIncludedIndex))
 	rf.lastApplied = max(rf.lastApplied, int(req.LastIncludedIndex))
-	// persist state and snapshot
-	// TODO
-	//rf.persistWithSnapshot(req.Data)
+	snapshotBuf := bytes.NewBuffer(req.Data)
+	rf.persistWithSnapshot(snapshotBuf)
 
 	msg := &types.ApplyMsg{
 		CommandValid:  false,
@@ -449,13 +491,14 @@ func (rf *Raft) sendInstallSnapshot(server int) {
 		rf.mu.Unlock()
 		return
 	}
+	// what if read failed? TODO
+	snapshotBuf, _ := rf.persister.ReadSnapshot()
 	req := &raftpb.InstallSnapshotRequest{
 		Term:              rf.currentTerm,
 		LeaderId:          int64(rf.me),
 		LastIncludedIndex: int64(rf.lastIncludedIndex),
 		LastIncludedTerm:  rf.lastIncludedTerm,
-		//TODO
-		//Data: rf.persister.ReadSnapshot(),
+		Data:              snapshotBuf.Bytes(),
 	}
 	rf.mu.Unlock()
 	res := &raftpb.InstallSnapshotResponse{}
@@ -477,8 +520,29 @@ func (rf *Raft) sendInstallSnapshot(server int) {
 	rf.matchIndex[server] = rf.lastIncludedIndex
 }
 
-func (rf *Raft) Snapshot(index int, snapshot []byte) {
+func (rf *Raft) Snapshot(index int, snapshotBuf *bytes.Buffer) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if index <= rf.lastIncludedIndex || index > rf.getLastLogIndex() || rf.killed() {
+		return
+	}
+	logPos := rf.getRelPos(index)
+	rf.lastIncludedIndex = index
+	rf.lastIncludedTerm = rf.log[logPos].Term
+	// cut log
+	rf.log = append([]*raftpb.LogEntry{{Term: rf.lastIncludedTerm, Log: nil}},
+		rf.log[logPos+1:]...)
 
+	rf.commitIndex = max(index, rf.commitIndex)
+	rf.lastApplied = max(index, rf.lastApplied)
+
+	rf.persistWithSnapshot(snapshotBuf)
+
+	if rf.state == Leader {
+		rf.heartbeatNow()
+	}
+
+	rf.applyCond.Signal()
 }
 
 func (rf *Raft) PersistBytes() int {
@@ -688,8 +752,7 @@ func (rf *Raft) initFollowerState(newTerm int64) {
 	rf.state = Follower
 	rf.currentTerm = newTerm
 	rf.votedFor = -1
-	// TODO
-	// rf.persist()
+	rf.persist()
 }
 
 // MUST CALLED WITHIN LOCK
@@ -697,6 +760,5 @@ func (rf *Raft) initCandidateState() {
 	rf.state = Candidate
 	rf.currentTerm++
 	rf.votedFor = rf.me
-	// TODO
-	// rf.persist()
+	rf.persist()
 }
