@@ -2,6 +2,7 @@ package service
 
 import (
 	//"sync"
+	"bytes"
 	"sync/atomic"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 
 type kvexecutor interface {
 	Execute(req *kvpb.RequestWithMeta) *kvpb.Response
-	Snapshot() []byte
-	Restore(snapshot []byte)
+	Snapshot() (*bytes.Buffer, error)
+	Restore(snapshot *bytes.Buffer) error
 }
 
 type RaftApplier struct {

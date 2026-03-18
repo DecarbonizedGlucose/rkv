@@ -1,6 +1,14 @@
 package engine
 
+import (
+	"bytes"
+)
+
 type Storage interface {
+	Stop()
+	Snapshot() (*bytes.Buffer, error)
+	Restore(*bytes.Buffer) error
+
 	Get(key []byte) ([]byte, uint64, error)
 	Put(key, value []byte) (uint64, error)
 	Delete(key []byte) error

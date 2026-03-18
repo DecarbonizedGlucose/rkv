@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	eg "github.com/DecarbonizedGlucose/rkv/internal/engine"
 )
@@ -57,12 +59,12 @@ func (exec *KVExecutor) Execute(reqM *kvpb.RequestWithMeta) *kvpb.Response {
 	return response
 }
 
-func (exec *KVExecutor) Snapshot() []byte {
-	return []byte{}
+func (exec *KVExecutor) Snapshot() (*bytes.Buffer, error) {
+	return exec.engine.Snapshot()
 }
 
-func (exec *KVExecutor) Restore([]byte) {
-
+func (exec *KVExecutor) Restore(buf *bytes.Buffer) error {
+	return exec.engine.Restore(buf)
 }
 
 // each operation
