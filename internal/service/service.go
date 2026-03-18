@@ -17,11 +17,11 @@ type ServiceNode struct {
 
 func MakeServiceNode(cfg *types.ServerConfig, opts []grpc.DialOption) *ServiceNode {
 	peers, me := raft.MakePeers(cfg, opts)
-	persister := raft.MakePersister()
+	persister := raft.MakePersister(&cfg.StoragePath, &cfg.RaftStatePersistedPath)
 	applyChannel := make(chan *types.ApplyMsg)
 	raftInstance := raft.MakeRaft(peers, me, persister, applyChannel)
 	raftHandler := raft.MakeRaftHandler(raftInstance)
-	executor := MakeKVExecutor()
+	executor := MakeKVExecutor(cfg)
 	raftApplier := MakeRaftApplier(cfg.MaxRaftState, executor, raftInstance)
 	return &ServiceNode{
 		peers:        peers,
@@ -34,6 +34,6 @@ func MakeServiceNode(cfg *types.ServerConfig, opts []grpc.DialOption) *ServiceNo
 }
 
 func (rn *ServiceNode) Kill() {
-	rn.raftInstance.Kill()
 	rn.raftApplier.Kill()
+	rn.executor.SafeStop()
 }
