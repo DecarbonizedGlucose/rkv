@@ -3,12 +3,15 @@ package service
 import (
 	//"sync"
 	"bytes"
+	"context"
+	"log"
 	"sync/atomic"
 	"time"
 
 	kvpb "github.com/DecarbonizedGlucose/rkv/api/kvrpc"
 	"github.com/DecarbonizedGlucose/rkv/internal/raft"
 	"github.com/DecarbonizedGlucose/rkv/internal/types"
+	"github.com/DecarbonizedGlucose/rkv/internal/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -43,7 +46,9 @@ func MakeRaftApplier(
 	ra.shutdown.Store(false)
 	ra.rf = rf
 	/*
+		TODO
 		read snapshot
+		fix here after finishing raft.go
 	*/
 	go ra.applyLoop()
 	return ra
@@ -54,7 +59,7 @@ func (ra *RaftApplier) Kill() {
 	ra.rf.Kill()
 }
 
-func (ra *RaftApplier) Submit(req *kvpb.RequestWithMeta) (res *kvpb.Response, err error) {
+func (ra *RaftApplier) Submit(ctx context.Context, req *kvpb.RequestWithMeta) (res *kvpb.Response, err error) {
 	if ra.shutdown.Load() {
 		return nil, status.Error(codes.Unavailable, "server is shutting down")
 	}
@@ -67,7 +72,7 @@ func (ra *RaftApplier) Submit(req *kvpb.RequestWithMeta) (res *kvpb.Response, er
 	ra.waitingCmds[index] = make(chan *kvpb.Response)
 
 	result, err := func() (*kvpb.Response, error) {
-		timer := time.NewTimer(1500 * time.Millisecond)
+		timer := time.NewTimer(utils.DeadlineFromCtx(ctx))
 		defer timer.Stop()
 		for {
 			if ra.shutdown.Load() {
@@ -75,6 +80,9 @@ func (ra *RaftApplier) Submit(req *kvpb.RequestWithMeta) (res *kvpb.Response, er
 				return nil, status.Error(codes.FailedPrecondition, "not the leader")
 			}
 			select {
+			case <-ctx.Done():
+				// client cancelled or timeout
+				return nil, ctx.Err()
 			case <-timer.C:
 				// timeout
 				return nil, status.Error(codes.DeadlineExceeded, "timeout")
@@ -132,9 +140,22 @@ func (ra *RaftApplier) applyCommand(msg *types.ApplyMsg) {
 }
 
 func (ra *RaftApplier) applySnapshot(msg *types.ApplyMsg) {
-	// TODO
+	if ra.shutdown.Load() {
+		return
+	}
+	engineSnapshot := bytes.NewBuffer(msg.Snapshot)
+	if err := ra.exec.Restore(engineSnapshot); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (ra *RaftApplier) createSnapshot(lastIncludedIndex int) {
-	// TODO
+	if ra.shutdown.Load() {
+		return
+	}
+	engineSnapshot, err := ra.exec.Snapshot()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ra.rf.Snapshot(lastIncludedIndex, engineSnapshot)
 }

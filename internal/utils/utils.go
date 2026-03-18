@@ -22,3 +22,14 @@ func IsCtxFailed(ctx context.Context) bool {
 		return false
 	}
 }
+
+func DeadlineFromCtx(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining > 0 {
+			return remaining
+		}
+		return 0
+	}
+	return 1500 * time.Millisecond
+}
