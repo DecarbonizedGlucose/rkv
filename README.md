@@ -1,2 +1,0 @@
-# RKV: A High-Performance Distributed Key-Value Store
-RKV is a distributed key-value storage system built on the Raft consensus algorithm. This project adopts a highly decoupled architecture, supports multiple access protocols (gRPC, Redis, HTTP), and implements pluggable storage engines.
