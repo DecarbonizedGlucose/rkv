@@ -10,16 +10,17 @@ option go_package = "github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb";
 
 message ResponseHeader {
     uint64 member_id = 1; // 节点在集群中的ID
-    int64  revision  = 2; // 集群 revision
+    uint64 revision  = 2; // 集群 revision
     uint64 raft_term = 3; // Raft 任期号
 }
 
 message KeyValue {
-    bytes key             = 1;
-    bytes value           = 2;
-    int64 revision        = 3; // 当前 revision
-    int64 create_revision = 4; // 创建时的 revision
-    int64 mod_revision    = 5; // 最后修改时的 revision
+    bytes  key             = 1;
+    bytes  value           = 2;
+    uint64 revision        = 3; // 当前 revision
+    uint64 create_revision = 4; // 创建时的 revision
+    uint64 mod_revision    = 5; // 最后修改时的 revision
+    int64  lease_id        = 6; // 关联的 LeaseID, 0 = 无
 }
 
 // ========================================
@@ -28,10 +29,11 @@ message KeyValue {
 
 message Command {
     oneof op {
-        PutRequest put = 1;
+        PutRequest    put    = 1;
         DeleteRequest delete = 2;
-        TxnRequest txn = 3;
-
+        TxnRequest    txn    = 3;
+        LeaseGrantCommand  lease_grant  = 4;
+        LeaseRevokeCommand lease_revoke = 5;
     }
 }
 
@@ -85,12 +87,12 @@ message DeleteResponse {
 // ========================================
 
 message RangeRequest {
-    bytes key        = 1; // 起始 key
-    bytes range_end  = 2; // 结束 key，为空表示精确匹配 key
-    int64 limit      = 3; // 返回上限（0 = 无限制）
-    int64 revision   = 4; // 指定 revision 读取（0 = 最新）
-    bool  keys_only  = 5; // 只返回 key，不返回 value
-    bool  count_only = 6; // 只返回计数
+    bytes  range_start = 1; // 起始 key [start, end)
+    bytes  range_end   = 2; // 结束 key，为空表示精确匹配 key
+    int64  limit       = 3; // 返回上限（0 = 无限制）
+    uint64 revision    = 4; // 指定 revision 读取（0 = 最新）
+    bool   keys_only   = 5; // 只返回 key，不返回 value
+    bool   count_only  = 6; // 只返回计数
 }
 
 message RangeResponse {
@@ -124,7 +126,7 @@ message Compare {
     bytes         key    = 3;
 
     oneof target_value {
-        int64 version = 4; // revision / lease
+        uint64 version = 4; // revision / lease
         bytes value   = 5; // value
     }
 }

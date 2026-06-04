@@ -177,7 +177,7 @@ func (Compare_CompareTarget) EnumDescriptor() ([]byte, []int) {
 type ResponseHeader struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MemberId      uint64                 `protobuf:"varint,1,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"` // 节点在集群中的ID
-	Revision      int64                  `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`                 // 集群 revision
+	Revision      uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`                 // 集群 revision
 	RaftTerm      uint64                 `protobuf:"varint,3,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"` // Raft 任期号
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -220,7 +220,7 @@ func (x *ResponseHeader) GetMemberId() uint64 {
 	return 0
 }
 
-func (x *ResponseHeader) GetRevision() int64 {
+func (x *ResponseHeader) GetRevision() uint64 {
 	if x != nil {
 		return x.Revision
 	}
@@ -238,9 +238,10 @@ type KeyValue struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Key            []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Value          []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Revision       int64                  `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`                                   // 当前 revision
-	CreateRevision int64                  `protobuf:"varint,4,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"` // 创建时的 revision
-	ModRevision    int64                  `protobuf:"varint,5,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"`          // 最后修改时的 revision
+	Revision       uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`                                   // 当前 revision
+	CreateRevision uint64                 `protobuf:"varint,4,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"` // 创建时的 revision
+	ModRevision    uint64                 `protobuf:"varint,5,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"`          // 最后修改时的 revision
+	LeaseId        int64                  `protobuf:"varint,6,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`                      // 关联的 LeaseID, 0 = 无
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -289,23 +290,30 @@ func (x *KeyValue) GetValue() []byte {
 	return nil
 }
 
-func (x *KeyValue) GetRevision() int64 {
+func (x *KeyValue) GetRevision() uint64 {
 	if x != nil {
 		return x.Revision
 	}
 	return 0
 }
 
-func (x *KeyValue) GetCreateRevision() int64 {
+func (x *KeyValue) GetCreateRevision() uint64 {
 	if x != nil {
 		return x.CreateRevision
 	}
 	return 0
 }
 
-func (x *KeyValue) GetModRevision() int64 {
+func (x *KeyValue) GetModRevision() uint64 {
 	if x != nil {
 		return x.ModRevision
+	}
+	return 0
+}
+
+func (x *KeyValue) GetLeaseId() int64 {
+	if x != nil {
+		return x.LeaseId
 	}
 	return 0
 }
@@ -317,6 +325,8 @@ type Command struct {
 	//	*Command_Put
 	//	*Command_Delete
 	//	*Command_Txn
+	//	*Command_LeaseGrant
+	//	*Command_LeaseRevoke
 	Op            isCommand_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -386,6 +396,24 @@ func (x *Command) GetTxn() *TxnRequest {
 	return nil
 }
 
+func (x *Command) GetLeaseGrant() *LeaseGrantCommand {
+	if x != nil {
+		if x, ok := x.Op.(*Command_LeaseGrant); ok {
+			return x.LeaseGrant
+		}
+	}
+	return nil
+}
+
+func (x *Command) GetLeaseRevoke() *LeaseRevokeCommand {
+	if x != nil {
+		if x, ok := x.Op.(*Command_LeaseRevoke); ok {
+			return x.LeaseRevoke
+		}
+	}
+	return nil
+}
+
 type isCommand_Op interface {
 	isCommand_Op()
 }
@@ -402,11 +430,23 @@ type Command_Txn struct {
 	Txn *TxnRequest `protobuf:"bytes,3,opt,name=txn,proto3,oneof"`
 }
 
+type Command_LeaseGrant struct {
+	LeaseGrant *LeaseGrantCommand `protobuf:"bytes,4,opt,name=lease_grant,json=leaseGrant,proto3,oneof"`
+}
+
+type Command_LeaseRevoke struct {
+	LeaseRevoke *LeaseRevokeCommand `protobuf:"bytes,5,opt,name=lease_revoke,json=leaseRevoke,proto3,oneof"`
+}
+
 func (*Command_Put) isCommand_Op() {}
 
 func (*Command_Delete) isCommand_Op() {}
 
 func (*Command_Txn) isCommand_Op() {}
+
+func (*Command_LeaseGrant) isCommand_Op() {}
+
+func (*Command_LeaseRevoke) isCommand_Op() {}
 
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -746,12 +786,12 @@ func (x *DeleteResponse) GetPrevKv() *KeyValue {
 
 type RangeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`                               // 起始 key
-	RangeEnd      []byte                 `protobuf:"bytes,2,opt,name=range_end,json=rangeEnd,proto3" json:"range_end,omitempty"`     // 结束 key，为空表示精确匹配 key
-	Limit         int64                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                          // 返回上限（0 = 无限制）
-	Revision      int64                  `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`                    // 指定 revision 读取（0 = 最新）
-	KeysOnly      bool                   `protobuf:"varint,5,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`    // 只返回 key，不返回 value
-	CountOnly     bool                   `protobuf:"varint,6,opt,name=count_only,json=countOnly,proto3" json:"count_only,omitempty"` // 只返回计数
+	RangeStart    []byte                 `protobuf:"bytes,1,opt,name=range_start,json=rangeStart,proto3" json:"range_start,omitempty"` // 起始 key
+	RangeEnd      []byte                 `protobuf:"bytes,2,opt,name=range_end,json=rangeEnd,proto3" json:"range_end,omitempty"`       // 结束 key，为空表示精确匹配 key
+	Limit         int64                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                            // 返回上限（0 = 无限制）
+	Revision      uint64                 `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`                      // 指定 revision 读取（0 = 最新）
+	KeysOnly      bool                   `protobuf:"varint,5,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`      // 只返回 key，不返回 value
+	CountOnly     bool                   `protobuf:"varint,6,opt,name=count_only,json=countOnly,proto3" json:"count_only,omitempty"`   // 只返回计数
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -786,9 +826,9 @@ func (*RangeRequest) Descriptor() ([]byte, []int) {
 	return file_kv_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *RangeRequest) GetKey() []byte {
+func (x *RangeRequest) GetRangeStart() []byte {
 	if x != nil {
-		return x.Key
+		return x.RangeStart
 	}
 	return nil
 }
@@ -807,7 +847,7 @@ func (x *RangeRequest) GetLimit() int64 {
 	return 0
 }
 
-func (x *RangeRequest) GetRevision() int64 {
+func (x *RangeRequest) GetRevision() uint64 {
 	if x != nil {
 		return x.Revision
 	}
@@ -968,7 +1008,7 @@ func (x *Compare) GetTargetValue() isCompare_TargetValue {
 	return nil
 }
 
-func (x *Compare) GetVersion() int64 {
+func (x *Compare) GetVersion() uint64 {
 	if x != nil {
 		if x, ok := x.TargetValue.(*Compare_Version); ok {
 			return x.Version
@@ -991,7 +1031,7 @@ type isCompare_TargetValue interface {
 }
 
 type Compare_Version struct {
-	Version int64 `protobuf:"varint,4,opt,name=version,proto3,oneof"` // revision / lease
+	Version uint64 `protobuf:"varint,4,opt,name=version,proto3,oneof"` // revision / lease
 }
 
 type Compare_Value struct {
@@ -1945,18 +1985,22 @@ const file_kv_proto_rawDesc = "" +
 	"\bkv.proto\x12\x04kvpb\"f\n" +
 	"\x0eResponseHeader\x12\x1b\n" +
 	"\tmember_id\x18\x01 \x01(\x04R\bmemberId\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\x03R\brevision\x12\x1b\n" +
-	"\traft_term\x18\x03 \x01(\x04R\braftTerm\"\x9a\x01\n" +
+	"\brevision\x18\x02 \x01(\x04R\brevision\x12\x1b\n" +
+	"\traft_term\x18\x03 \x01(\x04R\braftTerm\"\xb5\x01\n" +
 	"\bKeyValue\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x12\x1a\n" +
-	"\brevision\x18\x03 \x01(\x03R\brevision\x12'\n" +
-	"\x0fcreate_revision\x18\x04 \x01(\x03R\x0ecreateRevision\x12!\n" +
-	"\fmod_revision\x18\x05 \x01(\x03R\vmodRevision\"\x8a\x01\n" +
+	"\brevision\x18\x03 \x01(\x04R\brevision\x12'\n" +
+	"\x0fcreate_revision\x18\x04 \x01(\x04R\x0ecreateRevision\x12!\n" +
+	"\fmod_revision\x18\x05 \x01(\x04R\vmodRevision\x12\x19\n" +
+	"\blease_id\x18\x06 \x01(\x03R\aleaseId\"\x85\x02\n" +
 	"\aCommand\x12$\n" +
 	"\x03put\x18\x01 \x01(\v2\x10.kvpb.PutRequestH\x00R\x03put\x12-\n" +
 	"\x06delete\x18\x02 \x01(\v2\x13.kvpb.DeleteRequestH\x00R\x06delete\x12$\n" +
-	"\x03txn\x18\x03 \x01(\v2\x10.kvpb.TxnRequestH\x00R\x03txnB\x04\n" +
+	"\x03txn\x18\x03 \x01(\v2\x10.kvpb.TxnRequestH\x00R\x03txn\x12:\n" +
+	"\vlease_grant\x18\x04 \x01(\v2\x17.kvpb.LeaseGrantCommandH\x00R\n" +
+	"leaseGrant\x12=\n" +
+	"\flease_revoke\x18\x05 \x01(\v2\x18.kvpb.LeaseRevokeCommandH\x00R\vleaseRevokeB\x04\n" +
 	"\x02op\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
@@ -1980,12 +2024,13 @@ const file_kv_proto_rawDesc = "" +
 	"\x0eDeleteResponse\x12,\n" +
 	"\x06header\x18\x01 \x01(\v2\x14.kvpb.ResponseHeaderR\x06header\x12\x18\n" +
 	"\adeleted\x18\x02 \x01(\x03R\adeleted\x12'\n" +
-	"\aprev_kv\x18\x03 \x01(\v2\x0e.kvpb.KeyValueR\x06prevKv\"\xab\x01\n" +
-	"\fRangeRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\fR\x03key\x12\x1b\n" +
+	"\aprev_kv\x18\x03 \x01(\v2\x0e.kvpb.KeyValueR\x06prevKv\"\xba\x01\n" +
+	"\fRangeRequest\x12\x1f\n" +
+	"\vrange_start\x18\x01 \x01(\fR\n" +
+	"rangeStart\x12\x1b\n" +
 	"\trange_end\x18\x02 \x01(\fR\brangeEnd\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x03R\x05limit\x12\x1a\n" +
-	"\brevision\x18\x04 \x01(\x03R\brevision\x12\x1b\n" +
+	"\brevision\x18\x04 \x01(\x04R\brevision\x12\x1b\n" +
 	"\tkeys_only\x18\x05 \x01(\bR\bkeysOnly\x12\x1d\n" +
 	"\n" +
 	"count_only\x18\x06 \x01(\bR\tcountOnly\"\x89\x01\n" +
@@ -1998,7 +2043,7 @@ const file_kv_proto_rawDesc = "" +
 	"\x06result\x18\x01 \x01(\x0e2\x1b.kvpb.Compare.CompareResultR\x06result\x123\n" +
 	"\x06target\x18\x02 \x01(\x0e2\x1b.kvpb.Compare.CompareTargetR\x06target\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\fR\x03key\x12\x1a\n" +
-	"\aversion\x18\x04 \x01(\x03H\x00R\aversion\x12\x16\n" +
+	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x12\x16\n" +
 	"\x05value\x18\x05 \x01(\fH\x00R\x05value\"@\n" +
 	"\rCompareResult\x12\t\n" +
 	"\x05EQUAL\x10\x00\x12\v\n" +
@@ -2128,39 +2173,41 @@ var file_kv_proto_depIdxs = []int32{
 	8,  // 0: kvpb.Command.put:type_name -> kvpb.PutRequest
 	10, // 1: kvpb.Command.delete:type_name -> kvpb.DeleteRequest
 	17, // 2: kvpb.Command.txn:type_name -> kvpb.TxnRequest
-	3,  // 3: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 4: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
-	3,  // 5: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 6: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 7: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 8: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 9: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 10: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
-	1,  // 11: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
-	2,  // 12: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
-	8,  // 13: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
-	10, // 14: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
-	12, // 15: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
-	9,  // 16: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
-	11, // 17: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
-	13, // 18: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
-	14, // 19: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
-	15, // 20: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
-	15, // 21: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
-	3,  // 22: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
-	16, // 23: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
-	0,  // 24: kvpb.Event.type:type_name -> kvpb.EventType
-	4,  // 25: kvpb.Event.kv:type_name -> kvpb.KeyValue
-	4,  // 26: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 27: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 28: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 29: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 30: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	22, // 3: kvpb.Command.lease_grant:type_name -> kvpb.LeaseGrantCommand
+	23, // 4: kvpb.Command.lease_revoke:type_name -> kvpb.LeaseRevokeCommand
+	3,  // 5: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 6: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
+	3,  // 7: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 8: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 9: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 10: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 11: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 12: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
+	1,  // 13: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
+	2,  // 14: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
+	8,  // 15: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
+	10, // 16: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
+	12, // 17: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
+	9,  // 18: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
+	11, // 19: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
+	13, // 20: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
+	14, // 21: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
+	15, // 22: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
+	15, // 23: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
+	3,  // 24: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
+	16, // 25: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
+	0,  // 26: kvpb.Event.type:type_name -> kvpb.EventType
+	4,  // 27: kvpb.Event.kv:type_name -> kvpb.KeyValue
+	4,  // 28: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 29: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 30: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 31: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 32: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
+	33, // [33:33] is the sub-list for method output_type
+	33, // [33:33] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_kv_proto_init() }
@@ -2172,6 +2219,8 @@ func file_kv_proto_init() {
 		(*Command_Put)(nil),
 		(*Command_Delete)(nil),
 		(*Command_Txn)(nil),
+		(*Command_LeaseGrant)(nil),
+		(*Command_LeaseRevoke)(nil),
 	}
 	file_kv_proto_msgTypes[11].OneofWrappers = []any{
 		(*Compare_Version)(nil),
