@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package rpcpb;
+
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb";
+
+import "kv.proto";
+
+// ========================================
+// KV Service
+// ========================================
+
+service KVService {
+    rpc Put(kvpb.PutRequest)       returns (kvpb.PutResponse);
+    rpc Delete(kvpb.DeleteRequest) returns (kvpb.DeleteResponse);
+    rpc Get(kvpb.GetRequest)       returns (kvpb.GetResponse);
+    rpc Range(kvpb.RangeRequest)   returns (kvpb.RangeResponse);
+    rpc Txn(kvpb.TxnRequest)       returns (kvpb.TxnResponse);
+}
+
+// ========================================
+// Watch Service
+// ========================================
+
+service WatchService {
+    rpc Watch(kvpb.WatchRequest) returns (stream kvpb.WatchResponse);
+}
+
+// ========================================
+// Lease Service
+// ========================================
+
+service LeaseService {
+    rpc LeaseGrant(kvpb.LeaseGrantRequest)                returns (kvpb.LeaseGrantResponse);
+    rpc LeaseRevoke(kvpb.LeaseRevokeRequest)              returns (kvpb.LeaseRevokeResponse);
+    rpc LeaseKeepAlive(stream kvpb.LeaseKeepAliveRequest) returns (stream kvpb.LeaseKeepAliveResponse);
+}

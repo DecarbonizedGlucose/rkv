@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package raftpb;
+
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb";
+
+message Entry {
+    uint64 term  = 1; // 任期号
+    uint64 index = 2; // 日志索引
+    bytes  data  = 3; // 序列化的 command
+}
+
+// ========================================
+// Raft 内部消息
+// ========================================
+
+enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED           = 0;
+    MESSAGE_TYPE_APPEND_REQ            = 1;
+    MESSAGE_TYPE_APPEND_RESP           = 2;
+    MESSAGE_TYPE_REQUEST_VOTE_REQ      = 3;
+    MESSAGE_TYPE_REQUEST_VOTE_RESP     = 4;
+    MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ  = 5;
+    MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP = 6;
+    MESSAGE_TYPE_HEARTBEAT             = 7;
+}
+
+message RaftMessage {
+    MessageType type        = 1;
+    uint64      from        = 2; // 发送者节点 ID
+    uint64      to          = 3; // 接收者节点 ID
+    uint64      term        = 4; // 发送者任期
+
+    oneof body {
+        AppendEntriesRequest    append_req     = 10;
+        AppendEntriesResponse   append_resp    = 11;
+        RequestVoteRequest      vote_req       = 12;
+        RequestVoteResponse     vote_resp      = 13;
+        InstallSnapshotRequest  snap_req       = 14;
+        InstallSnapshotResponse snap_resp      = 15;
+        HeartbeatNotify         heartbeat      = 16;
+    }
+}
+
+message AppendEntriesRequest {
+    uint64          term            = 1;
+    uint64          leader_id       = 2;
+    uint64          prev_log_index  = 3;
+    uint64          prev_log_term   = 4;
+    repeated Entry  entries         = 5;
+    uint64          leader_commit   = 6;
+}
+
+message AppendEntriesResponse {
+    uint64 term         = 1;
+    uint64 last_log     = 2;
+    bool   success      = 3;
+    uint64 reject_hint  = 4;
+}
+
+message RequestVoteRequest {
+    uint64 term         = 1;
+    uint64 candidate_id = 2;
+    uint64 last_log_index = 3;
+    uint64 last_log_term  = 4;
+}
+
+message RequestVoteResponse {
+    uint64 term         = 1;
+    bool   vote_granted = 2;
+    uint64 voter_id     = 3;
+}
+
+message HeartbeatNotify {
+    uint64 term       = 1;
+    uint64 leader_id  = 2;
+    uint64 commit     = 3;
+}
+
+message InstallSnapshotRequest {
+    uint64 term              = 1;
+    uint64 leader_id         = 2;
+    uint64 last_included_index = 3;
+    uint64 last_included_term  = 4;
+    bytes  data              = 5; // snapshot data
+    bool   last              = 6;
+    uint64 offset            = 7; // 块偏移
+    uint64 len               = 8; // 块长度
+}
+
+message InstallSnapshotResponse {
+    uint64 term     = 1;
+    uint64 msg_size = 2; // 已接收的总大小
+    bool   success  = 3;
+}
+
+message Snapshot {
+    bytes            data = 1;
+    SnapshotMetadata metadata = 2;
+}
+
+message SnapshotMetadata {
+    uint64 last_included_index = 1;
+    uint64 last_included_term  = 2;
+    int64  revision            = 3; // 快照时的全局 revision
+}
+
+// ========================================
+// Raft Transport gRPC Service
+// ========================================
+
+service RaftTransport {
+    rpc StreamMessage(stream RaftMessage) returns (stream RaftMessage);
+}
