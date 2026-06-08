@@ -24,37 +24,43 @@ const (
 type MessageType int32
 
 const (
-	MessageType_MESSAGE_TYPE_UNSPECIFIED           MessageType = 0
-	MessageType_MESSAGE_TYPE_APPEND_REQ            MessageType = 1
-	MessageType_MESSAGE_TYPE_APPEND_RESP           MessageType = 2
-	MessageType_MESSAGE_TYPE_REQUEST_VOTE_REQ      MessageType = 3
-	MessageType_MESSAGE_TYPE_REQUEST_VOTE_RESP     MessageType = 4
-	MessageType_MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ  MessageType = 5
-	MessageType_MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP MessageType = 6
-	MessageType_MESSAGE_TYPE_HEARTBEAT             MessageType = 7
+	MessageType_UNSPECIFIED           MessageType = 0
+	MessageType_APPEND_REQ            MessageType = 1
+	MessageType_APPEND_RESP           MessageType = 2
+	MessageType_REQUEST_VOTE_REQ      MessageType = 3
+	MessageType_REQUEST_VOTE_RESP     MessageType = 4
+	MessageType_INSTALL_SNAPSHOT_REQ  MessageType = 5
+	MessageType_INSTALL_SNAPSHOT_RESP MessageType = 6
+	MessageType_HEARTBEAT             MessageType = 7 // 无消息体
+	MessageType_HUP                   MessageType = 8 // 无消息体
+	MessageType_PROPOSE               MessageType = 9 // body 是 Entry
 )
 
 // Enum value maps for MessageType.
 var (
 	MessageType_name = map[int32]string{
-		0: "MESSAGE_TYPE_UNSPECIFIED",
-		1: "MESSAGE_TYPE_APPEND_REQ",
-		2: "MESSAGE_TYPE_APPEND_RESP",
-		3: "MESSAGE_TYPE_REQUEST_VOTE_REQ",
-		4: "MESSAGE_TYPE_REQUEST_VOTE_RESP",
-		5: "MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ",
-		6: "MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP",
-		7: "MESSAGE_TYPE_HEARTBEAT",
+		0: "UNSPECIFIED",
+		1: "APPEND_REQ",
+		2: "APPEND_RESP",
+		3: "REQUEST_VOTE_REQ",
+		4: "REQUEST_VOTE_RESP",
+		5: "INSTALL_SNAPSHOT_REQ",
+		6: "INSTALL_SNAPSHOT_RESP",
+		7: "HEARTBEAT",
+		8: "HUP",
+		9: "PROPOSE",
 	}
 	MessageType_value = map[string]int32{
-		"MESSAGE_TYPE_UNSPECIFIED":           0,
-		"MESSAGE_TYPE_APPEND_REQ":            1,
-		"MESSAGE_TYPE_APPEND_RESP":           2,
-		"MESSAGE_TYPE_REQUEST_VOTE_REQ":      3,
-		"MESSAGE_TYPE_REQUEST_VOTE_RESP":     4,
-		"MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ":  5,
-		"MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP": 6,
-		"MESSAGE_TYPE_HEARTBEAT":             7,
+		"UNSPECIFIED":           0,
+		"APPEND_REQ":            1,
+		"APPEND_RESP":           2,
+		"REQUEST_VOTE_REQ":      3,
+		"REQUEST_VOTE_RESP":     4,
+		"INSTALL_SNAPSHOT_REQ":  5,
+		"INSTALL_SNAPSHOT_RESP": 6,
+		"HEARTBEAT":             7,
+		"HUP":                   8,
+		"PROPOSE":               9,
 	}
 )
 
@@ -159,7 +165,7 @@ type RaftMessage struct {
 	//	*RaftMessage_VoteResp
 	//	*RaftMessage_SnapReq
 	//	*RaftMessage_SnapResp
-	//	*RaftMessage_Heartbeat
+	//	*RaftMessage_Propose
 	Body          isRaftMessage_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -199,7 +205,7 @@ func (x *RaftMessage) GetType() MessageType {
 	if x != nil {
 		return x.Type
 	}
-	return MessageType_MESSAGE_TYPE_UNSPECIFIED
+	return MessageType_UNSPECIFIED
 }
 
 func (x *RaftMessage) GetFrom() uint64 {
@@ -284,10 +290,10 @@ func (x *RaftMessage) GetSnapResp() *InstallSnapshotResponse {
 	return nil
 }
 
-func (x *RaftMessage) GetHeartbeat() *HeartbeatNotify {
+func (x *RaftMessage) GetPropose() *Entry {
 	if x != nil {
-		if x, ok := x.Body.(*RaftMessage_Heartbeat); ok {
-			return x.Heartbeat
+		if x, ok := x.Body.(*RaftMessage_Propose); ok {
+			return x.Propose
 		}
 	}
 	return nil
@@ -321,8 +327,8 @@ type RaftMessage_SnapResp struct {
 	SnapResp *InstallSnapshotResponse `protobuf:"bytes,15,opt,name=snap_resp,json=snapResp,proto3,oneof"`
 }
 
-type RaftMessage_Heartbeat struct {
-	Heartbeat *HeartbeatNotify `protobuf:"bytes,16,opt,name=heartbeat,proto3,oneof"`
+type RaftMessage_Propose struct {
+	Propose *Entry `protobuf:"bytes,16,opt,name=propose,proto3,oneof"`
 }
 
 func (*RaftMessage_AppendReq) isRaftMessage_Body() {}
@@ -337,7 +343,7 @@ func (*RaftMessage_SnapReq) isRaftMessage_Body() {}
 
 func (*RaftMessage_SnapResp) isRaftMessage_Body() {}
 
-func (*RaftMessage_Heartbeat) isRaftMessage_Body() {}
+func (*RaftMessage_Propose) isRaftMessage_Body() {}
 
 type AppendEntriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -426,9 +432,9 @@ func (x *AppendEntriesRequest) GetLeaderCommit() uint64 {
 type AppendEntriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Term          uint64                 `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
-	LastLog       uint64                 `protobuf:"varint,2,opt,name=last_log,json=lastLog,proto3" json:"last_log,omitempty"`
-	Success       bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
-	RejectHint    uint64                 `protobuf:"varint,4,opt,name=reject_hint,json=rejectHint,proto3" json:"reject_hint,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	ConflictIndex uint64                 `protobuf:"varint,3,opt,name=conflict_index,json=conflictIndex,proto3" json:"conflict_index,omitempty"`
+	ConflictTerm  uint64                 `protobuf:"varint,4,opt,name=conflict_term,json=conflictTerm,proto3" json:"conflict_term,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -470,13 +476,6 @@ func (x *AppendEntriesResponse) GetTerm() uint64 {
 	return 0
 }
 
-func (x *AppendEntriesResponse) GetLastLog() uint64 {
-	if x != nil {
-		return x.LastLog
-	}
-	return 0
-}
-
 func (x *AppendEntriesResponse) GetSuccess() bool {
 	if x != nil {
 		return x.Success
@@ -484,9 +483,16 @@ func (x *AppendEntriesResponse) GetSuccess() bool {
 	return false
 }
 
-func (x *AppendEntriesResponse) GetRejectHint() uint64 {
+func (x *AppendEntriesResponse) GetConflictIndex() uint64 {
 	if x != nil {
-		return x.RejectHint
+		return x.ConflictIndex
+	}
+	return 0
+}
+
+func (x *AppendEntriesResponse) GetConflictTerm() uint64 {
+	if x != nil {
+		return x.ConflictTerm
 	}
 	return 0
 }
@@ -619,66 +625,6 @@ func (x *RequestVoteResponse) GetVoterId() uint64 {
 	return 0
 }
 
-type HeartbeatNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Term          uint64                 `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
-	LeaderId      uint64                 `protobuf:"varint,2,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
-	Commit        uint64                 `protobuf:"varint,3,opt,name=commit,proto3" json:"commit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HeartbeatNotify) Reset() {
-	*x = HeartbeatNotify{}
-	mi := &file_raft_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HeartbeatNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HeartbeatNotify) ProtoMessage() {}
-
-func (x *HeartbeatNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_raft_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HeartbeatNotify.ProtoReflect.Descriptor instead.
-func (*HeartbeatNotify) Descriptor() ([]byte, []int) {
-	return file_raft_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *HeartbeatNotify) GetTerm() uint64 {
-	if x != nil {
-		return x.Term
-	}
-	return 0
-}
-
-func (x *HeartbeatNotify) GetLeaderId() uint64 {
-	if x != nil {
-		return x.LeaderId
-	}
-	return 0
-}
-
-func (x *HeartbeatNotify) GetCommit() uint64 {
-	if x != nil {
-		return x.Commit
-	}
-	return 0
-}
-
 type InstallSnapshotRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Term              uint64                 `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
@@ -695,7 +641,7 @@ type InstallSnapshotRequest struct {
 
 func (x *InstallSnapshotRequest) Reset() {
 	*x = InstallSnapshotRequest{}
-	mi := &file_raft_proto_msgTypes[7]
+	mi := &file_raft_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -707,7 +653,7 @@ func (x *InstallSnapshotRequest) String() string {
 func (*InstallSnapshotRequest) ProtoMessage() {}
 
 func (x *InstallSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_raft_proto_msgTypes[7]
+	mi := &file_raft_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -720,7 +666,7 @@ func (x *InstallSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*InstallSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_raft_proto_rawDescGZIP(), []int{7}
+	return file_raft_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *InstallSnapshotRequest) GetTerm() uint64 {
@@ -790,7 +736,7 @@ type InstallSnapshotResponse struct {
 
 func (x *InstallSnapshotResponse) Reset() {
 	*x = InstallSnapshotResponse{}
-	mi := &file_raft_proto_msgTypes[8]
+	mi := &file_raft_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +748,7 @@ func (x *InstallSnapshotResponse) String() string {
 func (*InstallSnapshotResponse) ProtoMessage() {}
 
 func (x *InstallSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_raft_proto_msgTypes[8]
+	mi := &file_raft_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +761,7 @@ func (x *InstallSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*InstallSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_raft_proto_rawDescGZIP(), []int{8}
+	return file_raft_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InstallSnapshotResponse) GetTerm() uint64 {
@@ -849,7 +795,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_raft_proto_msgTypes[9]
+	mi := &file_raft_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -861,7 +807,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_raft_proto_msgTypes[9]
+	mi := &file_raft_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -874,7 +820,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_raft_proto_rawDescGZIP(), []int{9}
+	return file_raft_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Snapshot) GetData() []byte {
@@ -896,13 +842,14 @@ type SnapshotMetadata struct {
 	LastIncludedIndex uint64                 `protobuf:"varint,1,opt,name=last_included_index,json=lastIncludedIndex,proto3" json:"last_included_index,omitempty"`
 	LastIncludedTerm  uint64                 `protobuf:"varint,2,opt,name=last_included_term,json=lastIncludedTerm,proto3" json:"last_included_term,omitempty"`
 	Revision          int64                  `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"` // 快照时的全局 revision
+	ConfState         *ConfState             `protobuf:"bytes,4,opt,name=conf_state,json=confState,proto3" json:"conf_state,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SnapshotMetadata) Reset() {
 	*x = SnapshotMetadata{}
-	mi := &file_raft_proto_msgTypes[10]
+	mi := &file_raft_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -914,7 +861,7 @@ func (x *SnapshotMetadata) String() string {
 func (*SnapshotMetadata) ProtoMessage() {}
 
 func (x *SnapshotMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_raft_proto_msgTypes[10]
+	mi := &file_raft_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -927,7 +874,7 @@ func (x *SnapshotMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotMetadata.ProtoReflect.Descriptor instead.
 func (*SnapshotMetadata) Descriptor() ([]byte, []int) {
-	return file_raft_proto_rawDescGZIP(), []int{10}
+	return file_raft_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SnapshotMetadata) GetLastIncludedIndex() uint64 {
@@ -951,6 +898,117 @@ func (x *SnapshotMetadata) GetRevision() int64 {
 	return 0
 }
 
+func (x *SnapshotMetadata) GetConfState() *ConfState {
+	if x != nil {
+		return x.ConfState
+	}
+	return nil
+}
+
+type HardState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Term          uint64                 `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Vote          uint64                 `protobuf:"varint,2,opt,name=vote,proto3" json:"vote,omitempty"`
+	CommitIndex   uint64                 `protobuf:"varint,3,opt,name=commit_index,json=commitIndex,proto3" json:"commit_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HardState) Reset() {
+	*x = HardState{}
+	mi := &file_raft_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HardState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HardState) ProtoMessage() {}
+
+func (x *HardState) ProtoReflect() protoreflect.Message {
+	mi := &file_raft_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HardState.ProtoReflect.Descriptor instead.
+func (*HardState) Descriptor() ([]byte, []int) {
+	return file_raft_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *HardState) GetTerm() uint64 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *HardState) GetVote() uint64 {
+	if x != nil {
+		return x.Vote
+	}
+	return 0
+}
+
+func (x *HardState) GetCommitIndex() uint64 {
+	if x != nil {
+		return x.CommitIndex
+	}
+	return 0
+}
+
+type ConfState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nodes         []uint64               `protobuf:"varint,1,rep,packed,name=nodes,proto3" json:"nodes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfState) Reset() {
+	*x = ConfState{}
+	mi := &file_raft_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfState) ProtoMessage() {}
+
+func (x *ConfState) ProtoReflect() protoreflect.Message {
+	mi := &file_raft_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfState.ProtoReflect.Descriptor instead.
+func (*ConfState) Descriptor() ([]byte, []int) {
+	return file_raft_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ConfState) GetNodes() []uint64 {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
 var File_raft_proto protoreflect.FileDescriptor
 
 const file_raft_proto_rawDesc = "" +
@@ -960,7 +1018,7 @@ const file_raft_proto_rawDesc = "" +
 	"\x05Entry\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\x04R\x05index\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xa2\x04\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\x94\x04\n" +
 	"\vRaftMessage\x12'\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x13.raftpb.MessageTypeR\x04type\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\x04R\x04from\x12\x0e\n" +
@@ -974,8 +1032,8 @@ const file_raft_proto_rawDesc = "" +
 	"\bvote_req\x18\f \x01(\v2\x1a.raftpb.RequestVoteRequestH\x00R\avoteReq\x12:\n" +
 	"\tvote_resp\x18\r \x01(\v2\x1b.raftpb.RequestVoteResponseH\x00R\bvoteResp\x12;\n" +
 	"\bsnap_req\x18\x0e \x01(\v2\x1e.raftpb.InstallSnapshotRequestH\x00R\asnapReq\x12>\n" +
-	"\tsnap_resp\x18\x0f \x01(\v2\x1f.raftpb.InstallSnapshotResponseH\x00R\bsnapResp\x127\n" +
-	"\theartbeat\x18\x10 \x01(\v2\x17.raftpb.HeartbeatNotifyH\x00R\theartbeatB\x06\n" +
+	"\tsnap_resp\x18\x0f \x01(\v2\x1f.raftpb.InstallSnapshotResponseH\x00R\bsnapResp\x12)\n" +
+	"\apropose\x18\x10 \x01(\v2\r.raftpb.EntryH\x00R\aproposeB\x06\n" +
 	"\x04body\"\xdf\x01\n" +
 	"\x14AppendEntriesRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x1b\n" +
@@ -983,13 +1041,12 @@ const file_raft_proto_rawDesc = "" +
 	"\x0eprev_log_index\x18\x03 \x01(\x04R\fprevLogIndex\x12\"\n" +
 	"\rprev_log_term\x18\x04 \x01(\x04R\vprevLogTerm\x12'\n" +
 	"\aentries\x18\x05 \x03(\v2\r.raftpb.EntryR\aentries\x12#\n" +
-	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\"\x81\x01\n" +
+	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\"\x91\x01\n" +
 	"\x15AppendEntriesResponse\x12\x12\n" +
-	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x19\n" +
-	"\blast_log\x18\x02 \x01(\x04R\alastLog\x12\x18\n" +
-	"\asuccess\x18\x03 \x01(\bR\asuccess\x12\x1f\n" +
-	"\vreject_hint\x18\x04 \x01(\x04R\n" +
-	"rejectHint\"\x95\x01\n" +
+	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12%\n" +
+	"\x0econflict_index\x18\x03 \x01(\x04R\rconflictIndex\x12#\n" +
+	"\rconflict_term\x18\x04 \x01(\x04R\fconflictTerm\"\x95\x01\n" +
 	"\x12RequestVoteRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12!\n" +
 	"\fcandidate_id\x18\x02 \x01(\x04R\vcandidateId\x12$\n" +
@@ -998,11 +1055,7 @@ const file_raft_proto_rawDesc = "" +
 	"\x13RequestVoteResponse\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12!\n" +
 	"\fvote_granted\x18\x02 \x01(\bR\vvoteGranted\x12\x19\n" +
-	"\bvoter_id\x18\x03 \x01(\x04R\avoterId\"Z\n" +
-	"\x0fHeartbeatNotify\x12\x12\n" +
-	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x1b\n" +
-	"\tleader_id\x18\x02 \x01(\x04R\bleaderId\x12\x16\n" +
-	"\x06commit\x18\x03 \x01(\x04R\x06commit\"\xf9\x01\n" +
+	"\bvoter_id\x18\x03 \x01(\x04R\avoterId\"\xf9\x01\n" +
 	"\x16InstallSnapshotRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\x04R\bleaderId\x12.\n" +
@@ -1018,20 +1071,31 @@ const file_raft_proto_rawDesc = "" +
 	"\asuccess\x18\x03 \x01(\bR\asuccess\"T\n" +
 	"\bSnapshot\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x124\n" +
-	"\bmetadata\x18\x02 \x01(\v2\x18.raftpb.SnapshotMetadataR\bmetadata\"\x8c\x01\n" +
+	"\bmetadata\x18\x02 \x01(\v2\x18.raftpb.SnapshotMetadataR\bmetadata\"\xbe\x01\n" +
 	"\x10SnapshotMetadata\x12.\n" +
 	"\x13last_included_index\x18\x01 \x01(\x04R\x11lastIncludedIndex\x12,\n" +
 	"\x12last_included_term\x18\x02 \x01(\x04R\x10lastIncludedTerm\x12\x1a\n" +
-	"\brevision\x18\x03 \x01(\x03R\brevision*\x98\x02\n" +
-	"\vMessageType\x12\x1c\n" +
-	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17MESSAGE_TYPE_APPEND_REQ\x10\x01\x12\x1c\n" +
-	"\x18MESSAGE_TYPE_APPEND_RESP\x10\x02\x12!\n" +
-	"\x1dMESSAGE_TYPE_REQUEST_VOTE_REQ\x10\x03\x12\"\n" +
-	"\x1eMESSAGE_TYPE_REQUEST_VOTE_RESP\x10\x04\x12%\n" +
-	"!MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ\x10\x05\x12&\n" +
-	"\"MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP\x10\x06\x12\x1a\n" +
-	"\x16MESSAGE_TYPE_HEARTBEAT\x10\a2N\n" +
+	"\brevision\x18\x03 \x01(\x03R\brevision\x120\n" +
+	"\n" +
+	"conf_state\x18\x04 \x01(\v2\x11.raftpb.ConfStateR\tconfState\"V\n" +
+	"\tHardState\x12\x12\n" +
+	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x12\n" +
+	"\x04vote\x18\x02 \x01(\x04R\x04vote\x12!\n" +
+	"\fcommit_index\x18\x03 \x01(\x04R\vcommitIndex\"!\n" +
+	"\tConfState\x12\x14\n" +
+	"\x05nodes\x18\x01 \x03(\x04R\x05nodes*\xc6\x01\n" +
+	"\vMessageType\x12\x0f\n" +
+	"\vUNSPECIFIED\x10\x00\x12\x0e\n" +
+	"\n" +
+	"APPEND_REQ\x10\x01\x12\x0f\n" +
+	"\vAPPEND_RESP\x10\x02\x12\x14\n" +
+	"\x10REQUEST_VOTE_REQ\x10\x03\x12\x15\n" +
+	"\x11REQUEST_VOTE_RESP\x10\x04\x12\x18\n" +
+	"\x14INSTALL_SNAPSHOT_REQ\x10\x05\x12\x19\n" +
+	"\x15INSTALL_SNAPSHOT_RESP\x10\x06\x12\r\n" +
+	"\tHEARTBEAT\x10\a\x12\a\n" +
+	"\x03HUP\x10\b\x12\v\n" +
+	"\aPROPOSE\x10\t2N\n" +
 	"\rRaftTransport\x12=\n" +
 	"\rStreamMessage\x12\x13.raftpb.RaftMessage\x1a\x13.raftpb.RaftMessage(\x010\x01B9Z7github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpbb\x06proto3"
 
@@ -1048,7 +1112,7 @@ func file_raft_proto_rawDescGZIP() []byte {
 }
 
 var file_raft_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_raft_proto_goTypes = []any{
 	(MessageType)(0),                // 0: raftpb.MessageType
 	(*Entry)(nil),                   // 1: raftpb.Entry
@@ -1057,11 +1121,12 @@ var file_raft_proto_goTypes = []any{
 	(*AppendEntriesResponse)(nil),   // 4: raftpb.AppendEntriesResponse
 	(*RequestVoteRequest)(nil),      // 5: raftpb.RequestVoteRequest
 	(*RequestVoteResponse)(nil),     // 6: raftpb.RequestVoteResponse
-	(*HeartbeatNotify)(nil),         // 7: raftpb.HeartbeatNotify
-	(*InstallSnapshotRequest)(nil),  // 8: raftpb.InstallSnapshotRequest
-	(*InstallSnapshotResponse)(nil), // 9: raftpb.InstallSnapshotResponse
-	(*Snapshot)(nil),                // 10: raftpb.Snapshot
-	(*SnapshotMetadata)(nil),        // 11: raftpb.SnapshotMetadata
+	(*InstallSnapshotRequest)(nil),  // 7: raftpb.InstallSnapshotRequest
+	(*InstallSnapshotResponse)(nil), // 8: raftpb.InstallSnapshotResponse
+	(*Snapshot)(nil),                // 9: raftpb.Snapshot
+	(*SnapshotMetadata)(nil),        // 10: raftpb.SnapshotMetadata
+	(*HardState)(nil),               // 11: raftpb.HardState
+	(*ConfState)(nil),               // 12: raftpb.ConfState
 }
 var file_raft_proto_depIdxs = []int32{
 	0,  // 0: raftpb.RaftMessage.type:type_name -> raftpb.MessageType
@@ -1069,18 +1134,19 @@ var file_raft_proto_depIdxs = []int32{
 	4,  // 2: raftpb.RaftMessage.append_resp:type_name -> raftpb.AppendEntriesResponse
 	5,  // 3: raftpb.RaftMessage.vote_req:type_name -> raftpb.RequestVoteRequest
 	6,  // 4: raftpb.RaftMessage.vote_resp:type_name -> raftpb.RequestVoteResponse
-	8,  // 5: raftpb.RaftMessage.snap_req:type_name -> raftpb.InstallSnapshotRequest
-	9,  // 6: raftpb.RaftMessage.snap_resp:type_name -> raftpb.InstallSnapshotResponse
-	7,  // 7: raftpb.RaftMessage.heartbeat:type_name -> raftpb.HeartbeatNotify
+	7,  // 5: raftpb.RaftMessage.snap_req:type_name -> raftpb.InstallSnapshotRequest
+	8,  // 6: raftpb.RaftMessage.snap_resp:type_name -> raftpb.InstallSnapshotResponse
+	1,  // 7: raftpb.RaftMessage.propose:type_name -> raftpb.Entry
 	1,  // 8: raftpb.AppendEntriesRequest.entries:type_name -> raftpb.Entry
-	11, // 9: raftpb.Snapshot.metadata:type_name -> raftpb.SnapshotMetadata
-	2,  // 10: raftpb.RaftTransport.StreamMessage:input_type -> raftpb.RaftMessage
-	2,  // 11: raftpb.RaftTransport.StreamMessage:output_type -> raftpb.RaftMessage
-	11, // [11:12] is the sub-list for method output_type
-	10, // [10:11] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	10, // 9: raftpb.Snapshot.metadata:type_name -> raftpb.SnapshotMetadata
+	12, // 10: raftpb.SnapshotMetadata.conf_state:type_name -> raftpb.ConfState
+	2,  // 11: raftpb.RaftTransport.StreamMessage:input_type -> raftpb.RaftMessage
+	2,  // 12: raftpb.RaftTransport.StreamMessage:output_type -> raftpb.RaftMessage
+	12, // [12:13] is the sub-list for method output_type
+	11, // [11:12] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_raft_proto_init() }
@@ -1095,7 +1161,7 @@ func file_raft_proto_init() {
 		(*RaftMessage_VoteResp)(nil),
 		(*RaftMessage_SnapReq)(nil),
 		(*RaftMessage_SnapResp)(nil),
-		(*RaftMessage_Heartbeat)(nil),
+		(*RaftMessage_Propose)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1103,7 +1169,7 @@ func file_raft_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_raft_proto_rawDesc), len(file_raft_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

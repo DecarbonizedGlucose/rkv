@@ -786,7 +786,7 @@ func (x *DeleteResponse) GetPrevKv() *KeyValue {
 
 type RangeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RangeStart    []byte                 `protobuf:"bytes,1,opt,name=range_start,json=rangeStart,proto3" json:"range_start,omitempty"` // 起始 key
+	RangeStart    []byte                 `protobuf:"bytes,1,opt,name=range_start,json=rangeStart,proto3" json:"range_start,omitempty"` // 起始 key [start, end)
 	RangeEnd      []byte                 `protobuf:"bytes,2,opt,name=range_end,json=rangeEnd,proto3" json:"range_end,omitempty"`       // 结束 key，为空表示精确匹配 key
 	Limit         int64                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                            // 返回上限（0 = 无限制）
 	Revision      uint64                 `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`                      // 指定 revision 读取（0 = 最新）

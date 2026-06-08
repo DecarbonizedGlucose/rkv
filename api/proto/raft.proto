@@ -15,14 +15,16 @@ message Entry {
 // ========================================
 
 enum MessageType {
-    MESSAGE_TYPE_UNSPECIFIED           = 0;
-    MESSAGE_TYPE_APPEND_REQ            = 1;
-    MESSAGE_TYPE_APPEND_RESP           = 2;
-    MESSAGE_TYPE_REQUEST_VOTE_REQ      = 3;
-    MESSAGE_TYPE_REQUEST_VOTE_RESP     = 4;
-    MESSAGE_TYPE_INSTALL_SNAPSHOT_REQ  = 5;
-    MESSAGE_TYPE_INSTALL_SNAPSHOT_RESP = 6;
-    MESSAGE_TYPE_HEARTBEAT             = 7;
+    UNSPECIFIED           = 0;
+    APPEND_REQ            = 1;
+    APPEND_RESP           = 2;
+    REQUEST_VOTE_REQ      = 3;
+    REQUEST_VOTE_RESP     = 4;
+    INSTALL_SNAPSHOT_REQ  = 5;
+    INSTALL_SNAPSHOT_RESP = 6;
+    HEARTBEAT             = 7; // 无消息体
+    HUP                   = 8; // 无消息体
+    PROPOSE               = 9; // body 是 Entry
 }
 
 message RaftMessage {
@@ -38,7 +40,7 @@ message RaftMessage {
         RequestVoteResponse     vote_resp      = 13;
         InstallSnapshotRequest  snap_req       = 14;
         InstallSnapshotResponse snap_resp      = 15;
-        HeartbeatNotify         heartbeat      = 16;
+        Entry                   propose        = 16;
     }
 }
 
@@ -52,10 +54,10 @@ message AppendEntriesRequest {
 }
 
 message AppendEntriesResponse {
-    uint64 term         = 1;
-    uint64 last_log     = 2;
-    bool   success      = 3;
-    uint64 reject_hint  = 4;
+    uint64 term           = 1;
+    bool   success        = 2;
+    uint64 conflict_index = 3;
+    uint64 conflict_term  = 4;
 }
 
 message RequestVoteRequest {
@@ -69,12 +71,6 @@ message RequestVoteResponse {
     uint64 term         = 1;
     bool   vote_granted = 2;
     uint64 voter_id     = 3;
-}
-
-message HeartbeatNotify {
-    uint64 term       = 1;
-    uint64 leader_id  = 2;
-    uint64 commit     = 3;
 }
 
 message InstallSnapshotRequest {
@@ -103,7 +99,19 @@ message SnapshotMetadata {
     uint64 last_included_index = 1;
     uint64 last_included_term  = 2;
     int64  revision            = 3; // 快照时的全局 revision
+    ConfState conf_state       = 4;
 }
+
+message HardState {
+    uint64 term         = 1;
+    uint64 vote         = 2;
+    uint64 commit_index = 3;
+}
+
+message ConfState {
+    repeated uint64 nodes = 1;
+}
+
 
 // ========================================
 // Raft Transport gRPC Service
