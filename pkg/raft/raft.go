@@ -560,3 +560,11 @@ func (r *Raft) handlePropose(entry *raftpb.Entry) {
 	r.broadcastHeartbeat()
 	r.maybeCommit()
 }
+
+// ========================================
+// Ready 相关
+// ========================================
+
+func (r *Raft) clearMsgs() {
+	r.msgs = r.msgs[:0]
+}

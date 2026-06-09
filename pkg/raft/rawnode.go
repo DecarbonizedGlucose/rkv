@@ -64,8 +64,7 @@ func (rn *RawNode) Propose(data []byte) error {
 		Type: raftpb.MessageType_PROPOSE,
 		Body: &raftpb.RaftMessage_Propose{Propose: entry},
 	}
-	rn.Raft.step(msg)
-	return nil
+	return rn.Raft.step(msg)
 }
 
 func (rn *RawNode) Step(m *raftpb.RaftMessage) error {
@@ -129,6 +128,9 @@ func (rn *RawNode) Advance(rd *Ready) {
 	if !IsEmptySnapshot(rd.Snapshot) {
 		rn.Raft.raftLog.pendingSnapshot = nil
 	}
+	rn.Raft.clearMsgs()
+	rn.PrevSoftState = SoftStateCopy(rd.SoftState)
+	rn.PrevHardState = HardStateCopy(rd.HardState)
 	rn.Raft.raftLog.meybeCompact()
 }
 
