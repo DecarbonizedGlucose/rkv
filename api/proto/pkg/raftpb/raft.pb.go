@@ -435,6 +435,7 @@ type AppendEntriesResponse struct {
 	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
 	ConflictIndex uint64                 `protobuf:"varint,3,opt,name=conflict_index,json=conflictIndex,proto3" json:"conflict_index,omitempty"`
 	ConflictTerm  uint64                 `protobuf:"varint,4,opt,name=conflict_term,json=conflictTerm,proto3" json:"conflict_term,omitempty"`
+	LastLogIndex  uint64                 `protobuf:"varint,5,opt,name=last_log_index,json=lastLogIndex,proto3" json:"last_log_index,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -493,6 +494,13 @@ func (x *AppendEntriesResponse) GetConflictIndex() uint64 {
 func (x *AppendEntriesResponse) GetConflictTerm() uint64 {
 	if x != nil {
 		return x.ConflictTerm
+	}
+	return 0
+}
+
+func (x *AppendEntriesResponse) GetLastLogIndex() uint64 {
+	if x != nil {
+		return x.LastLogIndex
 	}
 	return 0
 }
@@ -1041,12 +1049,13 @@ const file_raft_proto_rawDesc = "" +
 	"\x0eprev_log_index\x18\x03 \x01(\x04R\fprevLogIndex\x12\"\n" +
 	"\rprev_log_term\x18\x04 \x01(\x04R\vprevLogTerm\x12'\n" +
 	"\aentries\x18\x05 \x03(\v2\r.raftpb.EntryR\aentries\x12#\n" +
-	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\"\x91\x01\n" +
+	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\"\xb7\x01\n" +
 	"\x15AppendEntriesResponse\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12%\n" +
 	"\x0econflict_index\x18\x03 \x01(\x04R\rconflictIndex\x12#\n" +
-	"\rconflict_term\x18\x04 \x01(\x04R\fconflictTerm\"\x95\x01\n" +
+	"\rconflict_term\x18\x04 \x01(\x04R\fconflictTerm\x12$\n" +
+	"\x0elast_log_index\x18\x05 \x01(\x04R\flastLogIndex\"\x95\x01\n" +
 	"\x12RequestVoteRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12!\n" +
 	"\fcandidate_id\x18\x02 \x01(\x04R\vcandidateId\x12$\n" +
