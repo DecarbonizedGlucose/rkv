@@ -16,6 +16,16 @@ type InternalValue struct {
 	LeaseID        int64
 }
 
+func (iv *InternalValue) Copy() *InternalValue {
+	newIV := &InternalValue{
+		UserValue:      make([]byte, len(iv.UserValue)),
+		CreateRevision: iv.CreateRevision,
+		LeaseID:        iv.LeaseID,
+	}
+	copy(newIV.UserValue, iv.UserValue)
+	return newIV
+}
+
 func MarshalInternalValue(iv *InternalValue) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(iv); err != nil {
@@ -36,6 +46,20 @@ type InternalKV struct {
 	Key, Value                     []byte
 	Revision, CRevision, MRevision uint64
 	LeaseID                        int64
+}
+
+func (ikv *InternalKV) Copy() *InternalKV {
+	newIKV := &InternalKV{
+		Key:       make([]byte, len(ikv.Key)),
+		Value:     make([]byte, len(ikv.Value)),
+		Revision:  ikv.Revision,
+		CRevision: ikv.CRevision,
+		MRevision: ikv.MRevision,
+		LeaseID:   ikv.LeaseID,
+	}
+	copy(newIKV.Key, ikv.Key)
+	copy(newIKV.Value, ikv.Value)
+	return newIKV
 }
 
 func MakeInternalKV(iv *InternalValue, data []byte, key []byte, rev, mrev uint64) (ikv *InternalKV, err error) {

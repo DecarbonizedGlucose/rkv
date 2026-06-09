@@ -83,7 +83,8 @@ message DeleteResponse {
 }
 
 // ========================================
-// Range, 前缀扫描
+// Range, 范围查询
+// 前缀扫描和分页查询都可以通过调整 range_end 和 limit 实现
 // ========================================
 
 message RangeRequest {

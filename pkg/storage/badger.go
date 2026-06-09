@@ -2,28 +2,40 @@ package storage
 
 import (
 	"bytes"
+	"log"
+	"math"
 
 	"github.com/DecarbonizedGlucose/rkv/pkg/util"
 	"github.com/dgraph-io/badger/v4"
 )
 
+// BadgerStorage 是 Storage 接口的 BadgerDB 实现，使用 ManagedDB 手动控制版本号。
+// revision 由上层 KV 状态机分配，通过 CommitAt(rev) 写入。
 type BadgerStorage struct {
 	db *badger.DB
 }
 
+// Get 获取指定 key 在当前最新版本下的值。
+// rev 参数保留用于后续支持指定 revision 读取，当前固定读取最新版本。
 func (b *BadgerStorage) Get(key []byte, rev uint64) (ikv *util.InternalKV, err error) {
-	txn := b.db.NewTransaction(false)
+	readTs := b.db.MaxVersion()
+	txn := b.db.NewTransactionAt(readTs, false)
 	defer txn.Discard()
 
 	item, err := txn.Get(key)
+	if err == badger.ErrKeyNotFound {
+		return nil, ErrKeyNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	cv, err := item.ValueCopy(nil)
-	mrev := item.Version()
 	if err != nil {
 		return nil, err
 	}
+	mrev := item.Version()
+
 	ikv, err = util.MakeInternalKV(nil, cv, key, rev, mrev)
 	if err != nil {
 		return nil, err
@@ -31,15 +43,19 @@ func (b *BadgerStorage) Get(key []byte, rev uint64) (ikv *util.InternalKV, err e
 	return ikv, nil
 }
 
+// Put 写入或覆盖 key，以 rev 作为 Badger 版本号提交。
+// prev_kv 为 true 时返回修改前的完整 IKVs，若 key 不存在则 ikv 为 nil。
 func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease int64) (ikv *util.InternalKV, err error) {
-	txn := b.db.NewTransaction(true)
+	readTs := b.db.MaxVersion()
+	txn := b.db.NewTransactionAt(readTs, true)
 	defer txn.Discard()
 
-	var iv *util.InternalValue
-	var cv []byte
+	var iv, newIV *util.InternalValue
+	var mrev uint64
+
 	item, err := txn.Get(key)
 	if err == badger.ErrKeyNotFound {
-		iv = &util.InternalValue{
+		newIV = &util.InternalValue{
 			UserValue:      value,
 			CreateRevision: rev,
 			LeaseID:        lease,
@@ -47,7 +63,8 @@ func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease i
 	} else if err != nil {
 		return nil, err
 	} else {
-		cv, err = item.ValueCopy(nil)
+		mrev = item.Version()
+		cv, err := item.ValueCopy(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -55,104 +72,94 @@ func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease i
 		if err != nil {
 			return nil, err
 		}
-		iv.UserValue = value
+		newIV = iv.Copy()
+		newIV.UserValue = value
 	}
-	newv, err := util.MarshalInternalValue(iv)
+
+	newv, err := util.MarshalInternalValue(newIV)
 	if err != nil {
 		return nil, err
 	}
-	err = txn.Set(key, newv)
-	if err != nil {
+	if err := txn.Set(key, newv); err != nil {
 		return nil, err
 	}
-	if prev_kv {
-		ikv, err = util.MakeInternalKV(iv, nil, nil, 0, 0)
+	if prev_kv && iv != nil {
+		ikv, err = util.MakeInternalKV(iv, nil, key, rev, mrev)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err = txn.Commit(); err != nil {
+	if err := txn.CommitAt(rev, nil); err != nil {
 		return nil, err
 	}
 	return ikv, nil
 }
 
+// Delete 删除 key，以 rev 作为 Badger 版本号提交。
+// prev_kv 为 true 时返回删除前的完整 IKVs，若 key 不存在则返回 ErrKeyNotFound。
 func (b *BadgerStorage) Delete(key []byte, prev_kv bool, rev uint64) (ikv *util.InternalKV, err error) {
-	txn := b.db.NewTransaction(true)
+	readTs := b.db.MaxVersion()
+	txn := b.db.NewTransactionAt(readTs, true)
 	defer txn.Discard()
 
-	var cv []byte
 	item, err := txn.Get(key)
 	if err == badger.ErrKeyNotFound {
 		return nil, ErrKeyNotFound
-	} else if err != nil {
+	}
+	if err != nil {
 		return nil, err
 	}
+
+	mrev := item.Version()
 
 	if prev_kv {
-		cv, err = item.ValueCopy(nil)
+		cv, err := item.ValueCopy(nil)
 		if err != nil {
 			return nil, err
 		}
-		ikv, err = util.MakeInternalKV(nil, cv, key, rev, item.Version())
+		ikv, err = util.MakeInternalKV(nil, cv, key, rev, mrev)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err = txn.Delete(key); err != nil {
+	if err := txn.Delete(key); err != nil {
 		return nil, err
 	}
-	if err = txn.Commit(); err != nil {
+	if err := txn.CommitAt(rev, nil); err != nil {
 		return nil, err
 	}
 	return ikv, nil
 }
 
-func (b *BadgerStorage) Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool) (ikvs []*util.InternalKV, more bool, err error) {
-	txn := b.db.NewTransaction(false)
+// Range 在 [start, end) 区间内扫描 kv 对，end 为空表示无上限。
+// limit 控制返回条目数（0 = 无限制），fn 用于过滤，返回 false 则跳过该条目。
+// more 表示区间内仍有未返回的 key（因 limit 截断或迭代器未耗尽）。
+func (b *BadgerStorage) Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool, rev uint64) (ikvs []*util.InternalKV, more bool, err error) {
+	readTs := b.db.MaxVersion()
+	txn := b.db.NewTransactionAt(readTs, false)
 	defer txn.Discard()
-
-	if len(end) == 0 {
-		item, err := txn.Get(start)
-		if err == badger.ErrKeyNotFound {
-			return nil, false, nil
-		}
-		if err != nil {
-			return nil, false, err
-		}
-		cv, err := item.ValueCopy(nil)
-		if err != nil {
-			return nil, false, err
-		}
-		ikv, err := util.MakeInternalKV(nil, cv, start, 0, item.Version())
-		if err != nil {
-			return nil, false, err
-		}
-		if fn != nil && !fn(ikv) {
-			return nil, false, nil
-		}
-		return []*util.InternalKV{ikv}, false, nil
-	}
 
 	opts := badger.DefaultIteratorOptions
 	opts.PrefetchValues = true
 	it := txn.NewIterator(opts)
 	defer it.Close()
 
+	hitLimit := false
 	count := 0
-	for it.Seek(start); it.Valid(); it.Next() {
+
+	for it.Seek(start); it.Valid() && !hitLimit; it.Next() {
 		item := it.Item()
-		key := item.Key()
-		if bytes.Compare(key, end) >= 0 {
+		key := item.KeyCopy(nil)
+
+		// 有 end 则做上界检查
+		if len(end) > 0 && bytes.Compare(key, end) >= 0 {
 			break
 		}
 
+		// 达到 limit，标记截断但不断迭代——需要先取完当前条目才知道 key 位置
 		if limit > 0 && count >= limit {
-			it.Next()
-			if it.Valid() && bytes.Compare(it.Item().Key(), end) < 0 {
-				more = true
-			}
+			hitLimit = true
 			break
 		}
 
@@ -160,23 +167,47 @@ func (b *BadgerStorage) Range(start, end []byte, limit int, fn func(ikv *util.In
 		if err != nil {
 			return nil, false, err
 		}
-		ikv, err := util.MakeInternalKV(nil, cv, key, 0, item.Version())
+		mrev := item.Version()
+		ikv, err := util.MakeInternalKV(nil, cv, key, rev, mrev)
 		if err != nil {
 			return nil, false, err
 		}
+
 		if fn != nil && !fn(ikv) {
 			continue
 		}
+
 		ikvs = append(ikvs, ikv)
 		count++
 	}
+
+	if hitLimit {
+		// 当前迭代器指向触发 limit 的条目，只要它在 end 范围内，就有 more
+		key := it.Item().KeyCopy(nil)
+		if len(end) == 0 || bytes.Compare(key, end) < 0 {
+			more = true
+		}
+	}
+
 	return ikvs, more, nil
 }
 
+// Close 关闭底层 BadgerDB 实例。
 func (b *BadgerStorage) Close() error {
+	if b.db != nil {
+		return b.db.Close()
+	}
 	return nil
 }
 
-func NewBadgerStorage() Storage {
-	return &BadgerStorage{}
+// NewBadgerStorage 打开或创建 BadgerDB ManagedDB 实例。
+// 使用 Managed 模式以支持上层手动控制 revision 作为版本号。
+func NewBadgerStorage(dir string) Storage {
+	opts := badger.DefaultOptions(dir).
+		WithNumVersionsToKeep(math.MaxInt32) // 保留所有历史版本，由上层控制压缩
+	db, err := badger.OpenManaged(opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &BadgerStorage{db: db}
 }

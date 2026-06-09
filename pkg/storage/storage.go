@@ -12,7 +12,7 @@ type Storage interface {
 
 	Delete(key []byte, prev_kv bool, rev uint64) (ikv *util.InternalKV, err error)
 
-	Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool) (ikvs []*util.InternalKV, more bool, err error)
+	Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool, rev uint64) (ikvs []*util.InternalKV, more bool, err error)
 
 	Close() error
 }
