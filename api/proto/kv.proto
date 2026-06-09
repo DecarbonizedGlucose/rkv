@@ -88,7 +88,7 @@ message DeleteResponse {
 
 message RangeRequest {
     bytes  range_start = 1; // 起始 key [start, end)
-    bytes  range_end   = 2; // 结束 key，为空表示精确匹配 key
+    bytes  range_end   = 2; // 结束 key，为空表示 [start, +inf)
     int64  limit       = 3; // 返回上限（0 = 无限制）
     uint64 revision    = 4; // 指定 revision 读取（0 = 最新）
     bool   keys_only   = 5; // 只返回 key，不返回 value
