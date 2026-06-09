@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/DecarbonizedGlucose/rkv/pkg/util"
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v4"
 )
 
 type BadgerStorage struct {
