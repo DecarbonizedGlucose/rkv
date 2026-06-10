@@ -9,6 +9,7 @@ import (
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raft"
+	"github.com/DecarbonizedGlucose/rkv/pkg/raft_transport"
 )
 
 var (
@@ -38,14 +39,6 @@ type Storage interface {
 	Compact(idx uint64) error
 }
 
-// Raft 集群之间通信中枢
-type Transport interface {
-	Send(msg *raftpb.RaftMessage) error
-	Recv() <-chan *raftpb.RaftMessage
-	Start() error
-	Stop() error
-}
-
 // proposal 将待提案数据与结果通道绑定，供 run goroutine 消费。
 type proposal struct {
 	data   []byte
@@ -57,7 +50,7 @@ type proposal struct {
 type Node struct {
 	rn        *raft.RawNode
 	storage   Storage
-	transport Transport
+	transport raft_transport.Transport
 	sm        StateMachine
 
 	propCh chan *proposal
@@ -77,7 +70,7 @@ type Node struct {
 type Config struct {
 	RaftConfig   *raft.Config
 	Storage      Storage
-	Transport    Transport
+	Transport    raft_transport.Transport
 	StateMachine StateMachine
 
 	// TickInterval 是 raft tick 周期，默认 100ms。
