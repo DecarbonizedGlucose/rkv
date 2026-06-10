@@ -6,7 +6,7 @@ import (
 
 func IsLocalMsg(m *raftpb.RaftMessage) bool {
 	switch m.Type {
-	case raftpb.MessageType_HUP, raftpb.MessageType_HEARTBEAT, raftpb.MessageType_PROPOSE:
+	case raftpb.MessageType_UNSPECIFIED, raftpb.MessageType_HANDSHAKE, raftpb.MessageType_HUP, raftpb.MessageType_HEARTBEAT, raftpb.MessageType_PROPOSE:
 		return true
 	default:
 		return false

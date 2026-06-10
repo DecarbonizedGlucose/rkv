@@ -25,6 +25,7 @@ enum MessageType {
     HEARTBEAT             = 7; // 无消息体
     HUP                   = 8; // 无消息体
     PROPOSE               = 9; // body 是 Entry
+    HANDSHAKE             = 10; // 用于传输层握手，无消息体
 }
 
 message RaftMessage {

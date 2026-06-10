@@ -149,6 +149,12 @@ func (r *Raft) maybeCommit() {
 
 func (r *Raft) step(m *raftpb.RaftMessage) error {
 	switch m.Type {
+	case raftpb.MessageType_UNSPECIFIED:
+		// 非法消息直接丢掉
+		return nil
+	case raftpb.MessageType_HANDSHAKE:
+		// 应该在传输层拦截，直接丢弃
+		return nil
 	case raftpb.MessageType_HUP:
 		if r.state != stateLeader {
 			r.startElection()

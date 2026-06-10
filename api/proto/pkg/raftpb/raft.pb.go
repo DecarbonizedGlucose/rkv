@@ -31,24 +31,26 @@ const (
 	MessageType_REQUEST_VOTE_RESP     MessageType = 4
 	MessageType_INSTALL_SNAPSHOT_REQ  MessageType = 5
 	MessageType_INSTALL_SNAPSHOT_RESP MessageType = 6
-	MessageType_HEARTBEAT             MessageType = 7 // 无消息体
-	MessageType_HUP                   MessageType = 8 // 无消息体
-	MessageType_PROPOSE               MessageType = 9 // body 是 Entry
+	MessageType_HEARTBEAT             MessageType = 7  // 无消息体
+	MessageType_HUP                   MessageType = 8  // 无消息体
+	MessageType_PROPOSE               MessageType = 9  // body 是 Entry
+	MessageType_HANDSHAKE             MessageType = 10 // 用于传输层握手，无消息体
 )
 
 // Enum value maps for MessageType.
 var (
 	MessageType_name = map[int32]string{
-		0: "UNSPECIFIED",
-		1: "APPEND_REQ",
-		2: "APPEND_RESP",
-		3: "REQUEST_VOTE_REQ",
-		4: "REQUEST_VOTE_RESP",
-		5: "INSTALL_SNAPSHOT_REQ",
-		6: "INSTALL_SNAPSHOT_RESP",
-		7: "HEARTBEAT",
-		8: "HUP",
-		9: "PROPOSE",
+		0:  "UNSPECIFIED",
+		1:  "APPEND_REQ",
+		2:  "APPEND_RESP",
+		3:  "REQUEST_VOTE_REQ",
+		4:  "REQUEST_VOTE_RESP",
+		5:  "INSTALL_SNAPSHOT_REQ",
+		6:  "INSTALL_SNAPSHOT_RESP",
+		7:  "HEARTBEAT",
+		8:  "HUP",
+		9:  "PROPOSE",
+		10: "HANDSHAKE",
 	}
 	MessageType_value = map[string]int32{
 		"UNSPECIFIED":           0,
@@ -61,6 +63,7 @@ var (
 		"HEARTBEAT":             7,
 		"HUP":                   8,
 		"PROPOSE":               9,
+		"HANDSHAKE":             10,
 	}
 )
 
@@ -1092,7 +1095,7 @@ const file_raft_proto_rawDesc = "" +
 	"\x04vote\x18\x02 \x01(\x04R\x04vote\x12!\n" +
 	"\fcommit_index\x18\x03 \x01(\x04R\vcommitIndex\"!\n" +
 	"\tConfState\x12\x14\n" +
-	"\x05nodes\x18\x01 \x03(\x04R\x05nodes*\xc6\x01\n" +
+	"\x05nodes\x18\x01 \x03(\x04R\x05nodes*\xd5\x01\n" +
 	"\vMessageType\x12\x0f\n" +
 	"\vUNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -1104,7 +1107,9 @@ const file_raft_proto_rawDesc = "" +
 	"\x15INSTALL_SNAPSHOT_RESP\x10\x06\x12\r\n" +
 	"\tHEARTBEAT\x10\a\x12\a\n" +
 	"\x03HUP\x10\b\x12\v\n" +
-	"\aPROPOSE\x10\t2N\n" +
+	"\aPROPOSE\x10\t\x12\r\n" +
+	"\tHANDSHAKE\x10\n" +
+	"2N\n" +
 	"\rRaftTransport\x12=\n" +
 	"\rStreamMessage\x12\x13.raftpb.RaftMessage\x1a\x13.raftpb.RaftMessage(\x010\x01B9Z7github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpbb\x06proto3"
 
