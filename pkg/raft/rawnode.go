@@ -2,6 +2,7 @@ package raft
 
 import (
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type SoftState struct {
@@ -129,9 +130,13 @@ func (rn *RawNode) Advance(rd *Ready) {
 		rn.Raft.raftLog.pendingSnapshot = nil
 	}
 	rn.Raft.clearMsgs()
-	rn.PrevSoftState = SoftStateCopy(rd.SoftState)
-	rn.PrevHardState = HardStateCopy(rd.HardState)
-	rn.Raft.raftLog.meybeCompact()
+	if rd.SoftState != nil {
+		rn.PrevSoftState = SoftStateCopy(rd.SoftState)
+	}
+	if rd.HardState != nil {
+		rn.PrevHardState = proto.Clone(rd.HardState).(*raftpb.HardState)
+	}
+	rn.Raft.raftLog.maybeCompact()
 }
 
 func (rn *RawNode) GetProgress() map[uint64]Progress {

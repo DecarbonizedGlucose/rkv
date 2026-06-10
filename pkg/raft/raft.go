@@ -2,7 +2,6 @@ package raft
 
 import (
 	"log"
-	"math/rand"
 	"sort"
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
@@ -50,14 +49,15 @@ func newRaft(cfg *Config) *Raft {
 	}
 
 	return &Raft{
-		id:               cfg.ID,
-		hardState:        hs,
-		state:            stateFollower,
-		prs:              prs,
-		votes:            make(map[uint64]bool),
-		raftLog:          newRaftLog(cfg.Storage),
-		electionTimeout:  cfg.ElectionTimeout,
-		heartbeatTimeout: cfg.HeartbeatTimeout,
+		id:                        cfg.ID,
+		hardState:                 proto.Clone(hs).(*raftpb.HardState),
+		state:                     stateFollower,
+		prs:                       prs,
+		votes:                     make(map[uint64]bool),
+		raftLog:                   newRaftLog(cfg.Storage),
+		electionTimeout:           cfg.ElectionTimeout,
+		randomizedElectionTimeout: randomizedElectionTimeout(cfg.ElectionTimeout),
+		heartbeatTimeout:          cfg.HeartbeatTimeout,
 	}
 }
 
@@ -66,7 +66,7 @@ func newRaft(cfg *Config) *Raft {
 // ========================================
 
 func (r *Raft) resetRandomizedElectionTimeout() {
-	r.randomizedElectionTimeout = r.electionTimeout + rand.Intn(r.electionTimeout)
+	r.randomizedElectionTimeout = randomizedElectionTimeout(r.electionTimeout)
 }
 
 func (r *Raft) tick() {
@@ -304,6 +304,14 @@ func (r *Raft) handleAppend(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleAppendResponse(m *raftpb.RaftMessage) {
+	if m.Term < r.hardState.Term {
+		return
+	}
+	if m.Term > r.hardState.Term {
+		r.becomeFollower(m.Term, 0)
+		return
+	}
+
 	resp := m.Body.(*raftpb.RaftMessage_AppendResp).AppendResp
 	pr := r.prs[m.From]
 	if pr == nil {
@@ -389,14 +397,14 @@ func (r *Raft) handleRequestVote(m *raftpb.RaftMessage) {
 		return
 	}
 
+	// 暂时保持原leader不变，避免频繁切换leader导致系统不可用。
+	r.becomeFollower(req.Term, r.leader_id)
+
 	if r.hardState.Vote != 0 && r.hardState.Vote != m.From { // 幂等判断
 		// 已经投给其他人了
 		r.send(msg)
 		return
 	}
-
-	r.becomeFollower(req.Term, m.From)
-	r.electionElapsed = 0
 
 	lastLogIndex := r.raftLog.lastLogIndex()
 	lastLogTerm := r.raftLog.lastLogTerm()
@@ -543,6 +551,14 @@ func (r *Raft) handleInstallSnapshot(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleInstallSnapshotResponse(m *raftpb.RaftMessage) {
+	if m.Term < r.hardState.Term {
+		return
+	}
+	if m.Term > r.hardState.Term {
+		r.becomeFollower(m.Term, 0)
+		return
+	}
+
 	resp := m.Body.(*raftpb.RaftMessage_SnapResp).SnapResp
 	if !resp.Success {
 		return

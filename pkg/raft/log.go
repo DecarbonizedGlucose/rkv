@@ -176,7 +176,7 @@ func (l *RaftLog) nextEntries(committedIndex uint64) []*raftpb.Entry {
 	return l.entries[l.appliedIndex+1-l.getLastIncluded() : committedIndex+1-l.getLastIncluded()]
 }
 
-func (l *RaftLog) meybeCompact() {
+func (l *RaftLog) maybeCompact() {
 	first, err := l.storage.FirstIndex()
 	if err != nil {
 		return

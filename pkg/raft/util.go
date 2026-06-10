@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"math/rand"
+
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
@@ -13,21 +15,14 @@ func IsLocalMsg(m *raftpb.RaftMessage) bool {
 	}
 }
 
+// 判断HardState是否一致。
+// 没有nil检查。
 func IsHSEqual(a, b *raftpb.HardState) bool {
 	return a.Term == b.Term && a.Vote == b.Vote && a.CommitIndex == b.CommitIndex
 }
 
-func HardStateCopy(from *raftpb.HardState) *raftpb.HardState {
-	if from == nil {
-		return nil
-	}
-	return &raftpb.HardState{
-		Term:        from.Term,
-		Vote:        from.Vote,
-		CommitIndex: from.CommitIndex,
-	}
-}
-
+// 判断SoftState是否一致。
+// 没有nil检查。
 func IsSSEqual(a, b *SoftState) bool {
 	return a.LeaderID == b.LeaderID && a.RaftState == b.RaftState
 }
@@ -50,4 +45,8 @@ func IsEmptySnapshot(s *raftpb.Snapshot) bool {
 		s.Metadata.LastIncludedTerm == 0 ||
 		s.Metadata.ConfState == nil ||
 		len(s.Metadata.ConfState.Nodes) <= 0
+}
+
+func randomizedElectionTimeout(electionTimeout int) int {
+	return electionTimeout + rand.Intn(electionTimeout)
 }
