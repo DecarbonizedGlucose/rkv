@@ -198,14 +198,12 @@ func (s *MemoryStorage) Append(entries []*raftpb.Entry) error {
 	defer s.Unlock()
 
 	first := s.firstIndex()
-	last := s.lastIndex()
-
-	if last > first {
-		return nil
-	}
 
 	if first > entries[0].Index {
 		entries = entries[first-entries[0].Index:]
+		if len(entries) == 0 {
+			return nil
+		}
 	}
 
 	offset := entries[0].Index - s.entries[0].Index
