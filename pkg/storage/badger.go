@@ -74,6 +74,9 @@ func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease i
 		}
 		newIV = iv.Copy()
 		newIV.UserValue = value
+		if lease != 0 { // 仅当 lease 非 0 时才更新，0 表示不修改租约
+			newIV.LeaseID = lease
+		}
 	}
 
 	newv, err := util.MarshalInternalValue(newIV)
@@ -205,6 +208,18 @@ func (b *BadgerStorage) Close() error {
 func NewBadgerStorage(dir string) Storage {
 	opts := badger.DefaultOptions(dir).
 		WithNumVersionsToKeep(math.MaxInt32) // 保留所有历史版本，由上层控制压缩
+	db, err := badger.OpenManaged(opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &BadgerStorage{db: db}
+}
+
+// NewBadgerStorageInMemory 创建纯内存的 BadgerStorage 实例，用于测试。
+func NewBadgerStorageInMemory() Storage {
+	opts := badger.DefaultOptions("").
+		WithInMemory(true).
+		WithNumVersionsToKeep(math.MaxInt32)
 	db, err := badger.OpenManaged(opts)
 	if err != nil {
 		log.Fatal(err)
