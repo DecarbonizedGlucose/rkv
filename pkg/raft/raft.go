@@ -148,63 +148,50 @@ func (r *Raft) maybeCommit() {
 // ========================================
 
 func (r *Raft) step(m *raftpb.RaftMessage) error {
+	// 忽略非法 / 传输层消息
+	if m.Type == raftpb.MessageType_UNSPECIFIED || m.Type == raftpb.MessageType_HANDSHAKE {
+		return nil
+	}
+
+	// 通用term守卫，收到更高term马上降级
+	if m.Term > r.hardState.Term {
+		r.becomeFollower(m.Term, 0) // 允许暂时未知 Leader
+	}
+
 	switch m.Type {
-	case raftpb.MessageType_UNSPECIFIED:
-		// 非法消息直接丢掉
-		return nil
-	case raftpb.MessageType_HANDSHAKE:
-		// 应该在传输层拦截，直接丢弃
-		return nil
 	case raftpb.MessageType_HUP:
 		if r.state != stateLeader {
 			r.startElection()
 		}
-		return nil
+
 	case raftpb.MessageType_HEARTBEAT:
 		if r.state == stateLeader {
 			r.broadcastHeartbeat()
 		}
-		return nil
+
 	case raftpb.MessageType_PROPOSE:
-		if r.state == stateLeader {
-			r.handlePropose(m.Body.(*raftpb.RaftMessage_Propose).Propose)
-		} else {
+		if r.state != stateLeader {
 			return ErrNotLeader
 		}
-		return nil
-	default:
-	}
+		r.handlePropose(m.Body.(*raftpb.RaftMessage_Propose).Propose)
 
-	switch r.state {
-	case stateFollower:
-		switch m.Type {
-		case raftpb.MessageType_APPEND_REQ:
-			r.handleAppend(m)
-		case raftpb.MessageType_REQUEST_VOTE_REQ:
-			r.handleRequestVote(m)
-		case raftpb.MessageType_INSTALL_SNAPSHOT_REQ:
-			r.handleInstallSnapshot(m)
-		}
-	case stateCandidate:
-		switch m.Type {
-		case raftpb.MessageType_REQUEST_VOTE_REQ:
-			r.handleRequestVote(m)
-		case raftpb.MessageType_REQUEST_VOTE_RESP:
-			r.handleRequestVoteResponse(m)
-		case raftpb.MessageType_APPEND_REQ:
-			r.becomeFollower(m.Term, m.From)
-			r.handleAppend(m)
-		case raftpb.MessageType_INSTALL_SNAPSHOT_REQ:
-			r.becomeFollower(m.Term, m.From)
-			r.handleInstallSnapshot(m)
-		}
-	case stateLeader:
-		switch m.Type {
-		case raftpb.MessageType_APPEND_RESP:
-			r.handleAppendResponse(m)
-		case raftpb.MessageType_INSTALL_SNAPSHOT_RESP:
-			r.handleInstallSnapshotResponse(m)
-		}
+	case raftpb.MessageType_APPEND_REQ:
+		r.handleAppend(m)
+
+	case raftpb.MessageType_APPEND_RESP:
+		r.handleAppendResponse(m)
+
+	case raftpb.MessageType_REQUEST_VOTE_REQ:
+		r.handleRequestVote(m)
+
+	case raftpb.MessageType_REQUEST_VOTE_RESP:
+		r.handleRequestVoteResponse(m)
+
+	case raftpb.MessageType_INSTALL_SNAPSHOT_REQ:
+		r.handleInstallSnapshot(m)
+
+	case raftpb.MessageType_INSTALL_SNAPSHOT_RESP:
+		r.handleInstallSnapshotResponse(m)
 	}
 	return nil
 }
@@ -270,7 +257,9 @@ func (r *Raft) handleAppend(m *raftpb.RaftMessage) {
 		return
 	}
 
-	r.becomeFollower(req.Term, m.From)
+	// step() 已处理 m.Term > hardState.Term 的降级，这里只为记录 leader 身份
+	r.becomeFollower(m.Term, m.From)
+	msg.Term = r.hardState.Term
 
 	// 日志没有可插入点
 	if req.PrevLogIndex < r.raftLog.getLastIncluded() || req.PrevLogIndex > r.raftLog.lastLogIndex() {
@@ -294,7 +283,7 @@ func (r *Raft) handleAppend(m *raftpb.RaftMessage) {
 	// 日志匹配, 插入日志
 	resp.Success = true
 	r.raftLog.trunc(req.PrevLogIndex + 1)
-	r.raftLog.append(req.Entries...)
+	r.raftLog.append(copyEntries(req.Entries)...)
 	resp.LastLogIndex = r.raftLog.lastLogIndex()
 
 	if req.LeaderCommit > r.hardState.CommitIndex {
@@ -304,15 +293,13 @@ func (r *Raft) handleAppend(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleAppendResponse(m *raftpb.RaftMessage) {
+	// step() 已处理 m.Term > hardState.Term 的降级
 	if m.Term < r.hardState.Term {
-		return
-	}
-	if m.Term > r.hardState.Term {
-		r.becomeFollower(m.Term, 0)
 		return
 	}
 
 	resp := m.Body.(*raftpb.RaftMessage_AppendResp).AppendResp
+
 	pr := r.prs[m.From]
 	if pr == nil {
 		return
@@ -397,8 +384,9 @@ func (r *Raft) handleRequestVote(m *raftpb.RaftMessage) {
 		return
 	}
 
-	// 暂时保持原leader不变，避免频繁切换leader导致系统不可用。
+	// step() 已处理 m.Term > hardState.Term 的降级，此处只更新 term 后的状态
 	r.becomeFollower(req.Term, r.leader_id)
+	msg.Term = r.hardState.Term
 
 	if r.hardState.Vote != 0 && r.hardState.Vote != m.From { // 幂等判断
 		// 已经投给其他人了
@@ -428,11 +416,8 @@ func (r *Raft) handleRequestVote(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleRequestVoteResponse(m *raftpb.RaftMessage) {
+	// step() 已处理 m.Term > hardState.Term 的降级
 	if m.Term < r.hardState.Term {
-		return
-	}
-	if m.Term > r.hardState.Term {
-		r.becomeFollower(m.Term, 0)
 		return
 	}
 
@@ -541,6 +526,7 @@ func (r *Raft) handleInstallSnapshot(m *raftpb.RaftMessage) {
 	}
 
 	r.becomeFollower(req.Term, m.From)
+	msg.Term = r.hardState.Term
 	r.electionElapsed = 0
 
 	resp.Success = true
@@ -551,11 +537,8 @@ func (r *Raft) handleInstallSnapshot(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleInstallSnapshotResponse(m *raftpb.RaftMessage) {
+	// step() 已处理 m.Term > hardState.Term 的降级
 	if m.Term < r.hardState.Term {
-		return
-	}
-	if m.Term > r.hardState.Term {
-		r.becomeFollower(m.Term, 0)
 		return
 	}
 
@@ -570,6 +553,14 @@ func (r *Raft) handleInstallSnapshotResponse(m *raftpb.RaftMessage) {
 	}
 	pr.MatchIndex = r.raftLog.getLastIncluded()
 	pr.NextIndex = r.raftLog.getLastIncluded() + 1
+}
+
+func copyEntries(src []*raftpb.Entry) []*raftpb.Entry {
+	dst := make([]*raftpb.Entry, len(src))
+	for i, e := range src {
+		dst[i] = proto.Clone(e).(*raftpb.Entry)
+	}
+	return dst
 }
 
 func (r *Raft) handlePropose(entry *raftpb.Entry) {

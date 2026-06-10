@@ -112,7 +112,23 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// HasReady 判断是否有待处理的工作或状态变化。
 func (rn *RawNode) HasReady() bool {
+	// 检查 SoftState 变化（Leader 切换）
+	if rn.PrevSoftState == nil ||
+		rn.Raft.leader_id != rn.PrevSoftState.LeaderID ||
+		rn.Raft.state != rn.PrevSoftState.RaftState {
+		return true
+	}
+	// 检查 HardState 变化
+	state := &raftpb.HardState{
+		Term:        rn.Raft.hardState.Term,
+		Vote:        rn.Raft.hardState.Vote,
+		CommitIndex: rn.Raft.hardState.CommitIndex,
+	}
+	if rn.PrevHardState == nil || !IsHSEqual(state, rn.PrevHardState) {
+		return true
+	}
 	return len(rn.Raft.msgs) > 0 ||
 		len(rn.Raft.raftLog.unstableEntries()) > 0 ||
 		len(rn.Raft.raftLog.nextEntries(rn.Raft.hardState.CommitIndex)) > 0 ||
