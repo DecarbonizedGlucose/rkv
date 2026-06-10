@@ -157,7 +157,12 @@ func (n *Node) LeaderID() uint64 {
 
 // 关闭节点，丢弃所有未完成的提案。
 func (n *Node) Stop() {
-	close(n.stopCh)
+	select {
+	case <-n.stopCh:
+		return // already stopped
+	default:
+		close(n.stopCh)
+	}
 	<-n.doneCh
 }
 
