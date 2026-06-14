@@ -1,4 +1,3 @@
-// Package testutil 为 minicd 测试提供可复用的辅助函数。
 package testutil
 
 import (

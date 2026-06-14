@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 )
 
 var (
@@ -79,4 +81,15 @@ func MakeInternalKV(iv *InternalValue, data []byte, key []byte, rev, mrev uint64
 		LeaseID:   iv.LeaseID,
 	}
 	return ikv, nil
+}
+
+func (ikv *InternalKV) ToProto() *kvpb.KeyValue {
+	return &kvpb.KeyValue{
+		Key:            ikv.Key,
+		Value:          ikv.Value,
+		Revision:       ikv.Revision,
+		CreateRevision: ikv.CRevision,
+		ModRevision:    ikv.MRevision,
+		LeaseId:        ikv.LeaseID,
+	}
 }

@@ -205,14 +205,16 @@ func (b *BadgerStorage) Close() error {
 
 // NewBadgerStorage 打开或创建 BadgerDB ManagedDB 实例。
 // 使用 Managed 模式以支持上层手动控制 revision 作为版本号。
-func NewBadgerStorage(dir string) Storage {
+// 返回 Storage 实例和当前最大 revision，后者可用于
+// 初始化全局 RevisionManager。
+func NewBadgerStorage(dir string) (Storage, uint64) {
 	opts := badger.DefaultOptions(dir).
 		WithNumVersionsToKeep(math.MaxInt32) // 保留所有历史版本，由上层控制压缩
 	db, err := badger.OpenManaged(opts)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &BadgerStorage{db: db}
+	return &BadgerStorage{db: db}, db.MaxVersion()
 }
 
 // NewBadgerStorageInMemory 创建纯内存的 BadgerStorage 实例，用于测试。
