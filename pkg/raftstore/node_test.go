@@ -117,6 +117,10 @@ func TestNodeStartAndBecomeLeader(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return n.LeaderID() == 1
 	}, 2*time.Second, 50*time.Millisecond, "single node should become Leader")
+
+	result, err := n.Propose([]byte{0}, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0}, result)
 }
 
 func TestNodeProposeAndApply(t *testing.T) {
