@@ -38,22 +38,28 @@ var _ raft_transport.Transport = (*mockTransport)(nil)
 // ========================================
 
 type mockStateMachine struct {
-	mu       sync.Mutex
-	applied  [][]byte
-	snapData []byte
+	mu      sync.Mutex
+	applied [][]byte
+	pid     uint64 // 递增 ProposalID
 }
 
-func (sm *mockStateMachine) Apply(entries []*raftpb.Entry) (int, error) {
+func (sm *mockStateMachine) Apply(entries []*raftpb.Entry) (results []raftstore.ApplyResult, err error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	for _, e := range entries {
 		sm.applied = append(sm.applied, e.Data)
 	}
-	return len(entries), nil
+	results = make([]raftstore.ApplyResult, 0, len(entries))
+	for _, e := range entries {
+		pid := sm.pid
+		sm.pid++
+		results = append(results, raftstore.ApplyResult{ProposalID: pid, Data: e.Data})
+	}
+	return results, nil
 }
 
-func (sm *mockStateMachine) SnapshotData() ([]byte, error)     { return sm.snapData, nil }
-func (sm *mockStateMachine) ApplySnapshot(*raftpb.Snapshot) error { return nil }
+func (sm *mockStateMachine) SnapshotData() ([]byte, error)           { return nil, nil }
+func (sm *mockStateMachine) ApplySnapshot(*raftpb.Snapshot) error    { return nil }
 
 func (sm *mockStateMachine) appliedData() [][]byte {
 	sm.mu.Lock()
@@ -108,7 +114,6 @@ func TestNodeStartAndBecomeLeader(t *testing.T) {
 	n, _, _, cleanup := newTestNode(t, 1, []uint64{1})
 	defer cleanup()
 
-	// 单节点应快速成为 Leader
 	require.Eventually(t, func() bool {
 		return n.LeaderID() == 1
 	}, 2*time.Second, 50*time.Millisecond, "single node should become Leader")
@@ -118,18 +123,16 @@ func TestNodeProposeAndApply(t *testing.T) {
 	n, _, sm, cleanup := newTestNode(t, 1, []uint64{1})
 	defer cleanup()
 
-	// 等待成为 Leader
 	require.Eventually(t, func() bool {
 		return n.LeaderID() == 1
 	}, 2*time.Second, 50*time.Millisecond)
 
-	err := n.Propose([]byte("hello"))
+	result, err := n.Propose([]byte("hello"), 0)
 	require.NoError(t, err)
+	assert.Equal(t, []byte("hello"), result)
 
-	// 等待状态机 apply
 	require.Eventually(t, func() bool {
-		applied := sm.appliedData()
-		for _, d := range applied {
+		for _, d := range sm.appliedData() {
 			if string(d) == "hello" {
 				return true
 			}
@@ -142,24 +145,21 @@ func TestNodeProposeNotLeader(t *testing.T) {
 	n, _, _, cleanup := newTestNode(t, 1, []uint64{1, 2, 3})
 	defer cleanup()
 
-	// 多节点集群未选举成功 → Propose 被拒
 	require.Eventually(t, func() bool {
-		err := n.Propose([]byte("x"))
+		_, err := n.Propose([]byte("x"), 0)
 		return errors.Is(err, raft.ErrNotLeader)
 	}, 2*time.Second, 50*time.Millisecond, "non-leader should reject propose with ErrNotLeader")
 }
 
 func TestNodeStop(t *testing.T) {
 	n, _, _, cleanup := newTestNode(t, 1, []uint64{1})
-	cleanup() // 显式 Stop
+	cleanup()
 
-	// 二次 Stop 不 panic
 	assert.NotPanics(t, func() {
 		n.Stop()
 	})
 
-	// Stop 后 Propose 返回 ErrStopped
-	err := n.Propose([]byte("x"))
+	_, err := n.Propose([]byte("x"), 0)
 	assert.ErrorIs(t, err, raftstore.ErrStopped)
 }
 
@@ -167,7 +167,6 @@ func TestNodeLeaderID(t *testing.T) {
 	n, _, _, cleanup := newTestNode(t, 1, []uint64{1, 2, 3})
 	defer cleanup()
 
-	// 初始未知
 	assert.Equal(t, uint64(0), n.LeaderID())
 }
 
@@ -180,8 +179,9 @@ func TestNodeMultipleProposes(t *testing.T) {
 	}, 2*time.Second, 50*time.Millisecond)
 
 	for i := 0; i < 5; i++ {
-		err := n.Propose([]byte{byte(i)})
+		result, err := n.Propose([]byte{byte(i)}, uint64(i))
 		require.NoError(t, err)
+		assert.Equal(t, []byte{byte(i)}, result)
 	}
 
 	require.Eventually(t, func() bool {

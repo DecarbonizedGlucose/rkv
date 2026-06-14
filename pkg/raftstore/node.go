@@ -12,19 +12,20 @@ import (
 	"github.com/DecarbonizedGlucose/rkv/pkg/raft_transport"
 )
 
-var (
-	ErrStopped = errors.New("raftstore: node has been stopped")
-)
-
 const (
 	defaultTickInterval  = 100 * time.Millisecond
 	defaultSnapshotCount = 10000
 )
 
+type ApplyResult struct {
+	ProposalID uint64
+	Data       []byte
+}
+
 // StateMachine 是 Raft 共识层驱动的状态机。
 // Apply 按序处理已提交的日志条目，实现必须容忍重复应用。
 type StateMachine interface {
-	Apply(entries []*raftpb.Entry) (acked int, err error)
+	Apply(entries []*raftpb.Entry) (results []ApplyResult, err error)
 	SnapshotData() ([]byte, error)
 	ApplySnapshot(snap *raftpb.Snapshot) error
 }
@@ -41,8 +42,10 @@ type Storage interface {
 
 // proposal 将待提案数据与结果通道绑定，供 run goroutine 消费。
 type proposal struct {
-	data   []byte
-	respCh chan error
+	data       []byte
+	proposalID uint64
+	startErrCh chan error
+	resultCh   chan []byte
 }
 
 // Node 是单个 Raft 参与者的集成中枢，连接 RawNode、持久化存储、
@@ -53,7 +56,8 @@ type Node struct {
 	transport raft_transport.Transport
 	sm        StateMachine
 
-	propCh chan *proposal
+	propCh  chan *proposal
+	pending map[uint64]*proposal // proposalID -> proposal，记录已提交但未完成的提案
 
 	// 从 Ready.SoftState 中提取，通过 LeaderID() 对外暴露。
 	leaderID atomic.Uint64
@@ -118,6 +122,7 @@ func NewNode(cfg *Config) (*Node, error) {
 		transport:     cfg.Transport,
 		sm:            cfg.StateMachine,
 		propCh:        make(chan *proposal, 256),
+		pending:       make(map[uint64]*proposal),
 		snapshotCount: snapCount,
 		tickInterval:  tickInterval,
 		ticker:        time.NewTicker(tickInterval),
@@ -131,23 +136,34 @@ func NewNode(cfg *Config) (*Node, error) {
 
 // 将数据提交到 Raft 日志中，阻塞直到日志追加完成（尚未 commit）。
 // 若当前节点不是 Leader 则返回 ErrNotLeader。
-func (n *Node) Propose(data []byte) error {
+func (n *Node) Propose(data []byte, proposalID uint64) ([]byte, error) {
 	p := &proposal{
-		data:   data,
-		respCh: make(chan error, 1),
+		data:       data,
+		proposalID: proposalID,
+		startErrCh: make(chan error, 1),
+		resultCh:   make(chan []byte, 1),
 	}
 
 	select {
 	case n.propCh <- p:
 	case <-n.stopCh:
-		return ErrStopped
+		return nil, ErrStopped
 	}
 
 	select {
-	case err := <-p.respCh:
-		return err
+	case err := <-p.startErrCh:
+		if err != nil {
+			return nil, err
+		}
 	case <-n.stopCh:
-		return ErrStopped
+		return nil, ErrStopped
+	}
+
+	select {
+	case result := <-p.resultCh:
+		return result, nil
+	case <-n.stopCh:
+		return nil, ErrStopped
 	}
 }
 
@@ -184,7 +200,11 @@ func (n *Node) run() {
 				}
 			}
 		case p := <-n.propCh:
-			p.respCh <- n.rn.Propose(p.data)
+			err := n.rn.Propose(p.data)
+			p.startErrCh <- err
+			if err == nil {
+				n.pending[p.proposalID] = p
+			}
 		case <-n.stopCh:
 			return
 		}
@@ -210,7 +230,16 @@ func (n *Node) processReady() {
 	n.sendMessages(rd.Messages)
 
 	// 应用已提交的日志条目到状态机
-	n.applyCommittedEntries(&rd)
+	results, err := n.applyCommittedEntries(&rd)
+	if err != nil {
+		if errors.Is(err, ErrApplyCorrupted) {
+			// 永久性错误
+			log.Fatalf("raftstore: unrecoverable apply error, exiting: %v\n", err)
+		}
+		// 可重试错误
+		log.Printf("raftstore: apply failed, will retry: %v\n", err)
+		return
+	}
 
 	// 可能触发创建新快照并压缩旧日志
 	n.maybeSnapshot(&rd)
@@ -218,6 +247,13 @@ func (n *Node) processReady() {
 	n.updateLeader(&rd)
 
 	n.rn.Advance(&rd)
+
+	for _, r := range results {
+		if p, ok := n.pending[r.ProposalID]; ok {
+			delete(n.pending, r.ProposalID)
+			p.resultCh <- r.Data
+		}
+	}
 }
 
 // 将快照写入存储并恢复状态机，Follower 侧收到快照时触发。
@@ -266,13 +302,11 @@ func (n *Node) sendMessages(msgs []*raftpb.RaftMessage) {
 
 // 将已提交的日志条目应用到状态机。
 // StateMachine.Apply 须容忍重复调用（同一条 entry 可能被 apply 多次）。
-func (n *Node) applyCommittedEntries(rd *raft.Ready) {
+func (n *Node) applyCommittedEntries(rd *raft.Ready) ([]ApplyResult, error) {
 	if len(rd.CommittedEntries) == 0 {
-		return
+		return nil, nil
 	}
-	if _, err := n.sm.Apply(rd.CommittedEntries); err != nil {
-		panic("raftstore: apply to state machine: " + err.Error())
-	}
+	return n.sm.Apply(rd.CommittedEntries)
 }
 
 // 在日志量超过阈值时创建快照并压缩旧日志。
