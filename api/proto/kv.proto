@@ -24,7 +24,7 @@ message KeyValue {
 }
 
 // ========================================
-// 写 Command
+// 写 Command 与 Result
 // ========================================
 
 message Command {
@@ -34,6 +34,16 @@ message Command {
         TxnRequest    txn    = 3;
         LeaseGrantCommand  lease_grant  = 4;
         LeaseRevokeCommand lease_revoke = 5;
+    }
+}
+
+message Result {
+    oneof res {
+        PutResponse    put    = 1;
+        DeleteResponse delete = 2;
+        TxnResponse    txn    = 3;
+        // LeaseGrantResponse  lease_grant  = 4;
+        // LeaseRevokeResponse lease_revoke = 5;
     }
 }
 

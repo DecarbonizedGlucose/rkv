@@ -119,7 +119,7 @@ func (x Compare_CompareResult) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Compare_CompareResult.Descriptor instead.
 func (Compare_CompareResult) EnumDescriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{11, 0}
+	return file_kv_proto_rawDescGZIP(), []int{12, 0}
 }
 
 type Compare_CompareTarget int32
@@ -171,7 +171,7 @@ func (x Compare_CompareTarget) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Compare_CompareTarget.Descriptor instead.
 func (Compare_CompareTarget) EnumDescriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{11, 1}
+	return file_kv_proto_rawDescGZIP(), []int{12, 1}
 }
 
 type ResponseHeader struct {
@@ -448,6 +448,104 @@ func (*Command_LeaseGrant) isCommand_Op() {}
 
 func (*Command_LeaseRevoke) isCommand_Op() {}
 
+type Result struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Res:
+	//
+	//	*Result_Put
+	//	*Result_Delete
+	//	*Result_Txn
+	Res           isResult_Res `protobuf_oneof:"res"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Result) Reset() {
+	*x = Result{}
+	mi := &file_kv_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Result) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Result) ProtoMessage() {}
+
+func (x *Result) ProtoReflect() protoreflect.Message {
+	mi := &file_kv_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Result.ProtoReflect.Descriptor instead.
+func (*Result) Descriptor() ([]byte, []int) {
+	return file_kv_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Result) GetRes() isResult_Res {
+	if x != nil {
+		return x.Res
+	}
+	return nil
+}
+
+func (x *Result) GetPut() *PutResponse {
+	if x != nil {
+		if x, ok := x.Res.(*Result_Put); ok {
+			return x.Put
+		}
+	}
+	return nil
+}
+
+func (x *Result) GetDelete() *DeleteResponse {
+	if x != nil {
+		if x, ok := x.Res.(*Result_Delete); ok {
+			return x.Delete
+		}
+	}
+	return nil
+}
+
+func (x *Result) GetTxn() *TxnResponse {
+	if x != nil {
+		if x, ok := x.Res.(*Result_Txn); ok {
+			return x.Txn
+		}
+	}
+	return nil
+}
+
+type isResult_Res interface {
+	isResult_Res()
+}
+
+type Result_Put struct {
+	Put *PutResponse `protobuf:"bytes,1,opt,name=put,proto3,oneof"`
+}
+
+type Result_Delete struct {
+	Delete *DeleteResponse `protobuf:"bytes,2,opt,name=delete,proto3,oneof"`
+}
+
+type Result_Txn struct {
+	Txn *TxnResponse `protobuf:"bytes,3,opt,name=txn,proto3,oneof"`
+}
+
+func (*Result_Put) isResult_Res() {}
+
+func (*Result_Delete) isResult_Res() {}
+
+func (*Result_Txn) isResult_Res() {}
+
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -457,7 +555,7 @@ type GetRequest struct {
 
 func (x *GetRequest) Reset() {
 	*x = GetRequest{}
-	mi := &file_kv_proto_msgTypes[3]
+	mi := &file_kv_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -469,7 +567,7 @@ func (x *GetRequest) String() string {
 func (*GetRequest) ProtoMessage() {}
 
 func (x *GetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[3]
+	mi := &file_kv_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,7 +580,7 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{3}
+	return file_kv_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetRequest) GetKey() []byte {
@@ -503,7 +601,7 @@ type GetResponse struct {
 
 func (x *GetResponse) Reset() {
 	*x = GetResponse{}
-	mi := &file_kv_proto_msgTypes[4]
+	mi := &file_kv_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -515,7 +613,7 @@ func (x *GetResponse) String() string {
 func (*GetResponse) ProtoMessage() {}
 
 func (x *GetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[4]
+	mi := &file_kv_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -528,7 +626,7 @@ func (x *GetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResponse.ProtoReflect.Descriptor instead.
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{4}
+	return file_kv_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetResponse) GetHeader() *ResponseHeader {
@@ -564,7 +662,7 @@ type PutRequest struct {
 
 func (x *PutRequest) Reset() {
 	*x = PutRequest{}
-	mi := &file_kv_proto_msgTypes[5]
+	mi := &file_kv_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -576,7 +674,7 @@ func (x *PutRequest) String() string {
 func (*PutRequest) ProtoMessage() {}
 
 func (x *PutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[5]
+	mi := &file_kv_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,7 +687,7 @@ func (x *PutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutRequest.ProtoReflect.Descriptor instead.
 func (*PutRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{5}
+	return file_kv_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PutRequest) GetKey() []byte {
@@ -630,7 +728,7 @@ type PutResponse struct {
 
 func (x *PutResponse) Reset() {
 	*x = PutResponse{}
-	mi := &file_kv_proto_msgTypes[6]
+	mi := &file_kv_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +740,7 @@ func (x *PutResponse) String() string {
 func (*PutResponse) ProtoMessage() {}
 
 func (x *PutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[6]
+	mi := &file_kv_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +753,7 @@ func (x *PutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutResponse.ProtoReflect.Descriptor instead.
 func (*PutResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{6}
+	return file_kv_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PutResponse) GetHeader() *ResponseHeader {
@@ -682,7 +780,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_kv_proto_msgTypes[7]
+	mi := &file_kv_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -694,7 +792,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[7]
+	mi := &file_kv_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +805,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{7}
+	return file_kv_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteRequest) GetKey() []byte {
@@ -735,7 +833,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_kv_proto_msgTypes[8]
+	mi := &file_kv_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +845,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[8]
+	mi := &file_kv_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +858,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{8}
+	return file_kv_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteResponse) GetHeader() *ResponseHeader {
@@ -798,7 +896,7 @@ type RangeRequest struct {
 
 func (x *RangeRequest) Reset() {
 	*x = RangeRequest{}
-	mi := &file_kv_proto_msgTypes[9]
+	mi := &file_kv_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -810,7 +908,7 @@ func (x *RangeRequest) String() string {
 func (*RangeRequest) ProtoMessage() {}
 
 func (x *RangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[9]
+	mi := &file_kv_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -823,7 +921,7 @@ func (x *RangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RangeRequest.ProtoReflect.Descriptor instead.
 func (*RangeRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{9}
+	return file_kv_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RangeRequest) GetRangeStart() []byte {
@@ -880,7 +978,7 @@ type RangeResponse struct {
 
 func (x *RangeResponse) Reset() {
 	*x = RangeResponse{}
-	mi := &file_kv_proto_msgTypes[10]
+	mi := &file_kv_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +990,7 @@ func (x *RangeResponse) String() string {
 func (*RangeResponse) ProtoMessage() {}
 
 func (x *RangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[10]
+	mi := &file_kv_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +1003,7 @@ func (x *RangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RangeResponse.ProtoReflect.Descriptor instead.
 func (*RangeResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{10}
+	return file_kv_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RangeResponse) GetHeader() *ResponseHeader {
@@ -952,7 +1050,7 @@ type Compare struct {
 
 func (x *Compare) Reset() {
 	*x = Compare{}
-	mi := &file_kv_proto_msgTypes[11]
+	mi := &file_kv_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -964,7 +1062,7 @@ func (x *Compare) String() string {
 func (*Compare) ProtoMessage() {}
 
 func (x *Compare) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[11]
+	mi := &file_kv_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -977,7 +1075,7 @@ func (x *Compare) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Compare.ProtoReflect.Descriptor instead.
 func (*Compare) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{11}
+	return file_kv_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Compare) GetResult() Compare_CompareResult {
@@ -1056,7 +1154,7 @@ type RequestOp struct {
 
 func (x *RequestOp) Reset() {
 	*x = RequestOp{}
-	mi := &file_kv_proto_msgTypes[12]
+	mi := &file_kv_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1068,7 +1166,7 @@ func (x *RequestOp) String() string {
 func (*RequestOp) ProtoMessage() {}
 
 func (x *RequestOp) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[12]
+	mi := &file_kv_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1081,7 +1179,7 @@ func (x *RequestOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestOp.ProtoReflect.Descriptor instead.
 func (*RequestOp) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{12}
+	return file_kv_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RequestOp) GetRequest() isRequestOp_Request {
@@ -1154,7 +1252,7 @@ type ResponseOp struct {
 
 func (x *ResponseOp) Reset() {
 	*x = ResponseOp{}
-	mi := &file_kv_proto_msgTypes[13]
+	mi := &file_kv_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1264,7 @@ func (x *ResponseOp) String() string {
 func (*ResponseOp) ProtoMessage() {}
 
 func (x *ResponseOp) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[13]
+	mi := &file_kv_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,7 +1277,7 @@ func (x *ResponseOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResponseOp.ProtoReflect.Descriptor instead.
 func (*ResponseOp) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{13}
+	return file_kv_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ResponseOp) GetResponse() isResponseOp_Response {
@@ -1249,7 +1347,7 @@ type TxnRequest struct {
 
 func (x *TxnRequest) Reset() {
 	*x = TxnRequest{}
-	mi := &file_kv_proto_msgTypes[14]
+	mi := &file_kv_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1261,7 +1359,7 @@ func (x *TxnRequest) String() string {
 func (*TxnRequest) ProtoMessage() {}
 
 func (x *TxnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[14]
+	mi := &file_kv_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1372,7 @@ func (x *TxnRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TxnRequest.ProtoReflect.Descriptor instead.
 func (*TxnRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{14}
+	return file_kv_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TxnRequest) GetCompares() []*Compare {
@@ -1309,7 +1407,7 @@ type TxnResponse struct {
 
 func (x *TxnResponse) Reset() {
 	*x = TxnResponse{}
-	mi := &file_kv_proto_msgTypes[15]
+	mi := &file_kv_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1321,7 +1419,7 @@ func (x *TxnResponse) String() string {
 func (*TxnResponse) ProtoMessage() {}
 
 func (x *TxnResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[15]
+	mi := &file_kv_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1334,7 +1432,7 @@ func (x *TxnResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TxnResponse.ProtoReflect.Descriptor instead.
 func (*TxnResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{15}
+	return file_kv_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TxnResponse) GetHeader() *ResponseHeader {
@@ -1369,7 +1467,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_kv_proto_msgTypes[16]
+	mi := &file_kv_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1381,7 +1479,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[16]
+	mi := &file_kv_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1394,7 +1492,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{16}
+	return file_kv_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Event) GetType() EventType {
@@ -1431,7 +1529,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_kv_proto_msgTypes[17]
+	mi := &file_kv_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1541,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[17]
+	mi := &file_kv_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1554,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{17}
+	return file_kv_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WatchRequest) GetKey() []byte {
@@ -1507,7 +1605,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_kv_proto_msgTypes[18]
+	mi := &file_kv_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1519,7 +1617,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[18]
+	mi := &file_kv_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1532,7 +1630,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{18}
+	return file_kv_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WatchResponse) GetHeader() *ResponseHeader {
@@ -1580,7 +1678,7 @@ type LeaseGrantCommand struct {
 
 func (x *LeaseGrantCommand) Reset() {
 	*x = LeaseGrantCommand{}
-	mi := &file_kv_proto_msgTypes[19]
+	mi := &file_kv_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1592,7 +1690,7 @@ func (x *LeaseGrantCommand) String() string {
 func (*LeaseGrantCommand) ProtoMessage() {}
 
 func (x *LeaseGrantCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[19]
+	mi := &file_kv_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1605,7 +1703,7 @@ func (x *LeaseGrantCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseGrantCommand.ProtoReflect.Descriptor instead.
 func (*LeaseGrantCommand) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{19}
+	return file_kv_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *LeaseGrantCommand) GetId() int64 {
@@ -1631,7 +1729,7 @@ type LeaseRevokeCommand struct {
 
 func (x *LeaseRevokeCommand) Reset() {
 	*x = LeaseRevokeCommand{}
-	mi := &file_kv_proto_msgTypes[20]
+	mi := &file_kv_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1741,7 @@ func (x *LeaseRevokeCommand) String() string {
 func (*LeaseRevokeCommand) ProtoMessage() {}
 
 func (x *LeaseRevokeCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[20]
+	mi := &file_kv_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1754,7 @@ func (x *LeaseRevokeCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseRevokeCommand.ProtoReflect.Descriptor instead.
 func (*LeaseRevokeCommand) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{20}
+	return file_kv_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LeaseRevokeCommand) GetId() int64 {
@@ -1676,7 +1774,7 @@ type LeaseGrantRequest struct {
 
 func (x *LeaseGrantRequest) Reset() {
 	*x = LeaseGrantRequest{}
-	mi := &file_kv_proto_msgTypes[21]
+	mi := &file_kv_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1688,7 +1786,7 @@ func (x *LeaseGrantRequest) String() string {
 func (*LeaseGrantRequest) ProtoMessage() {}
 
 func (x *LeaseGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[21]
+	mi := &file_kv_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1701,7 +1799,7 @@ func (x *LeaseGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseGrantRequest.ProtoReflect.Descriptor instead.
 func (*LeaseGrantRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{21}
+	return file_kv_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *LeaseGrantRequest) GetTtl() int64 {
@@ -1730,7 +1828,7 @@ type LeaseGrantResponse struct {
 
 func (x *LeaseGrantResponse) Reset() {
 	*x = LeaseGrantResponse{}
-	mi := &file_kv_proto_msgTypes[22]
+	mi := &file_kv_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1840,7 @@ func (x *LeaseGrantResponse) String() string {
 func (*LeaseGrantResponse) ProtoMessage() {}
 
 func (x *LeaseGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[22]
+	mi := &file_kv_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1853,7 @@ func (x *LeaseGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseGrantResponse.ProtoReflect.Descriptor instead.
 func (*LeaseGrantResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{22}
+	return file_kv_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *LeaseGrantResponse) GetHeader() *ResponseHeader {
@@ -1795,7 +1893,7 @@ type LeaseRevokeRequest struct {
 
 func (x *LeaseRevokeRequest) Reset() {
 	*x = LeaseRevokeRequest{}
-	mi := &file_kv_proto_msgTypes[23]
+	mi := &file_kv_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1807,7 +1905,7 @@ func (x *LeaseRevokeRequest) String() string {
 func (*LeaseRevokeRequest) ProtoMessage() {}
 
 func (x *LeaseRevokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[23]
+	mi := &file_kv_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1820,7 +1918,7 @@ func (x *LeaseRevokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseRevokeRequest.ProtoReflect.Descriptor instead.
 func (*LeaseRevokeRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{23}
+	return file_kv_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *LeaseRevokeRequest) GetId() int64 {
@@ -1839,7 +1937,7 @@ type LeaseRevokeResponse struct {
 
 func (x *LeaseRevokeResponse) Reset() {
 	*x = LeaseRevokeResponse{}
-	mi := &file_kv_proto_msgTypes[24]
+	mi := &file_kv_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1851,7 +1949,7 @@ func (x *LeaseRevokeResponse) String() string {
 func (*LeaseRevokeResponse) ProtoMessage() {}
 
 func (x *LeaseRevokeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[24]
+	mi := &file_kv_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1864,7 +1962,7 @@ func (x *LeaseRevokeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseRevokeResponse.ProtoReflect.Descriptor instead.
 func (*LeaseRevokeResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{24}
+	return file_kv_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LeaseRevokeResponse) GetHeader() *ResponseHeader {
@@ -1883,7 +1981,7 @@ type LeaseKeepAliveRequest struct {
 
 func (x *LeaseKeepAliveRequest) Reset() {
 	*x = LeaseKeepAliveRequest{}
-	mi := &file_kv_proto_msgTypes[25]
+	mi := &file_kv_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1895,7 +1993,7 @@ func (x *LeaseKeepAliveRequest) String() string {
 func (*LeaseKeepAliveRequest) ProtoMessage() {}
 
 func (x *LeaseKeepAliveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[25]
+	mi := &file_kv_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1908,7 +2006,7 @@ func (x *LeaseKeepAliveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseKeepAliveRequest.ProtoReflect.Descriptor instead.
 func (*LeaseKeepAliveRequest) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{25}
+	return file_kv_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *LeaseKeepAliveRequest) GetId() int64 {
@@ -1929,7 +2027,7 @@ type LeaseKeepAliveResponse struct {
 
 func (x *LeaseKeepAliveResponse) Reset() {
 	*x = LeaseKeepAliveResponse{}
-	mi := &file_kv_proto_msgTypes[26]
+	mi := &file_kv_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1941,7 +2039,7 @@ func (x *LeaseKeepAliveResponse) String() string {
 func (*LeaseKeepAliveResponse) ProtoMessage() {}
 
 func (x *LeaseKeepAliveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kv_proto_msgTypes[26]
+	mi := &file_kv_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1954,7 +2052,7 @@ func (x *LeaseKeepAliveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseKeepAliveResponse.ProtoReflect.Descriptor instead.
 func (*LeaseKeepAliveResponse) Descriptor() ([]byte, []int) {
-	return file_kv_proto_rawDescGZIP(), []int{26}
+	return file_kv_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *LeaseKeepAliveResponse) GetHeader() *ResponseHeader {
@@ -2001,7 +2099,12 @@ const file_kv_proto_rawDesc = "" +
 	"\vlease_grant\x18\x04 \x01(\v2\x17.kvpb.LeaseGrantCommandH\x00R\n" +
 	"leaseGrant\x12=\n" +
 	"\flease_revoke\x18\x05 \x01(\v2\x18.kvpb.LeaseRevokeCommandH\x00R\vleaseRevokeB\x04\n" +
-	"\x02op\"\x1e\n" +
+	"\x02op\"\x8d\x01\n" +
+	"\x06Result\x12%\n" +
+	"\x03put\x18\x01 \x01(\v2\x11.kvpb.PutResponseH\x00R\x03put\x12.\n" +
+	"\x06delete\x18\x02 \x01(\v2\x14.kvpb.DeleteResponseH\x00R\x06delete\x12%\n" +
+	"\x03txn\x18\x03 \x01(\v2\x11.kvpb.TxnResponseH\x00R\x03txnB\x05\n" +
+	"\x03res\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\"q\n" +
@@ -2136,7 +2239,7 @@ func file_kv_proto_rawDescGZIP() []byte {
 }
 
 var file_kv_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_kv_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_kv_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_kv_proto_goTypes = []any{
 	(EventType)(0),                 // 0: kvpb.EventType
 	(Compare_CompareResult)(0),     // 1: kvpb.Compare.CompareResult
@@ -2144,70 +2247,74 @@ var file_kv_proto_goTypes = []any{
 	(*ResponseHeader)(nil),         // 3: kvpb.ResponseHeader
 	(*KeyValue)(nil),               // 4: kvpb.KeyValue
 	(*Command)(nil),                // 5: kvpb.Command
-	(*GetRequest)(nil),             // 6: kvpb.GetRequest
-	(*GetResponse)(nil),            // 7: kvpb.GetResponse
-	(*PutRequest)(nil),             // 8: kvpb.PutRequest
-	(*PutResponse)(nil),            // 9: kvpb.PutResponse
-	(*DeleteRequest)(nil),          // 10: kvpb.DeleteRequest
-	(*DeleteResponse)(nil),         // 11: kvpb.DeleteResponse
-	(*RangeRequest)(nil),           // 12: kvpb.RangeRequest
-	(*RangeResponse)(nil),          // 13: kvpb.RangeResponse
-	(*Compare)(nil),                // 14: kvpb.Compare
-	(*RequestOp)(nil),              // 15: kvpb.RequestOp
-	(*ResponseOp)(nil),             // 16: kvpb.ResponseOp
-	(*TxnRequest)(nil),             // 17: kvpb.TxnRequest
-	(*TxnResponse)(nil),            // 18: kvpb.TxnResponse
-	(*Event)(nil),                  // 19: kvpb.Event
-	(*WatchRequest)(nil),           // 20: kvpb.WatchRequest
-	(*WatchResponse)(nil),          // 21: kvpb.WatchResponse
-	(*LeaseGrantCommand)(nil),      // 22: kvpb.LeaseGrantCommand
-	(*LeaseRevokeCommand)(nil),     // 23: kvpb.LeaseRevokeCommand
-	(*LeaseGrantRequest)(nil),      // 24: kvpb.LeaseGrantRequest
-	(*LeaseGrantResponse)(nil),     // 25: kvpb.LeaseGrantResponse
-	(*LeaseRevokeRequest)(nil),     // 26: kvpb.LeaseRevokeRequest
-	(*LeaseRevokeResponse)(nil),    // 27: kvpb.LeaseRevokeResponse
-	(*LeaseKeepAliveRequest)(nil),  // 28: kvpb.LeaseKeepAliveRequest
-	(*LeaseKeepAliveResponse)(nil), // 29: kvpb.LeaseKeepAliveResponse
+	(*Result)(nil),                 // 6: kvpb.Result
+	(*GetRequest)(nil),             // 7: kvpb.GetRequest
+	(*GetResponse)(nil),            // 8: kvpb.GetResponse
+	(*PutRequest)(nil),             // 9: kvpb.PutRequest
+	(*PutResponse)(nil),            // 10: kvpb.PutResponse
+	(*DeleteRequest)(nil),          // 11: kvpb.DeleteRequest
+	(*DeleteResponse)(nil),         // 12: kvpb.DeleteResponse
+	(*RangeRequest)(nil),           // 13: kvpb.RangeRequest
+	(*RangeResponse)(nil),          // 14: kvpb.RangeResponse
+	(*Compare)(nil),                // 15: kvpb.Compare
+	(*RequestOp)(nil),              // 16: kvpb.RequestOp
+	(*ResponseOp)(nil),             // 17: kvpb.ResponseOp
+	(*TxnRequest)(nil),             // 18: kvpb.TxnRequest
+	(*TxnResponse)(nil),            // 19: kvpb.TxnResponse
+	(*Event)(nil),                  // 20: kvpb.Event
+	(*WatchRequest)(nil),           // 21: kvpb.WatchRequest
+	(*WatchResponse)(nil),          // 22: kvpb.WatchResponse
+	(*LeaseGrantCommand)(nil),      // 23: kvpb.LeaseGrantCommand
+	(*LeaseRevokeCommand)(nil),     // 24: kvpb.LeaseRevokeCommand
+	(*LeaseGrantRequest)(nil),      // 25: kvpb.LeaseGrantRequest
+	(*LeaseGrantResponse)(nil),     // 26: kvpb.LeaseGrantResponse
+	(*LeaseRevokeRequest)(nil),     // 27: kvpb.LeaseRevokeRequest
+	(*LeaseRevokeResponse)(nil),    // 28: kvpb.LeaseRevokeResponse
+	(*LeaseKeepAliveRequest)(nil),  // 29: kvpb.LeaseKeepAliveRequest
+	(*LeaseKeepAliveResponse)(nil), // 30: kvpb.LeaseKeepAliveResponse
 }
 var file_kv_proto_depIdxs = []int32{
-	8,  // 0: kvpb.Command.put:type_name -> kvpb.PutRequest
-	10, // 1: kvpb.Command.delete:type_name -> kvpb.DeleteRequest
-	17, // 2: kvpb.Command.txn:type_name -> kvpb.TxnRequest
-	22, // 3: kvpb.Command.lease_grant:type_name -> kvpb.LeaseGrantCommand
-	23, // 4: kvpb.Command.lease_revoke:type_name -> kvpb.LeaseRevokeCommand
-	3,  // 5: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 6: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
-	3,  // 7: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 8: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 9: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 10: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 11: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 12: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
-	1,  // 13: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
-	2,  // 14: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
-	8,  // 15: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
-	10, // 16: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
-	12, // 17: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
-	9,  // 18: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
-	11, // 19: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
-	13, // 20: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
-	14, // 21: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
-	15, // 22: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
-	15, // 23: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
-	3,  // 24: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
-	16, // 25: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
-	0,  // 26: kvpb.Event.type:type_name -> kvpb.EventType
-	4,  // 27: kvpb.Event.kv:type_name -> kvpb.KeyValue
-	4,  // 28: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 29: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 30: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 31: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 32: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
-	33, // [33:33] is the sub-list for method output_type
-	33, // [33:33] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	9,  // 0: kvpb.Command.put:type_name -> kvpb.PutRequest
+	11, // 1: kvpb.Command.delete:type_name -> kvpb.DeleteRequest
+	18, // 2: kvpb.Command.txn:type_name -> kvpb.TxnRequest
+	23, // 3: kvpb.Command.lease_grant:type_name -> kvpb.LeaseGrantCommand
+	24, // 4: kvpb.Command.lease_revoke:type_name -> kvpb.LeaseRevokeCommand
+	10, // 5: kvpb.Result.put:type_name -> kvpb.PutResponse
+	12, // 6: kvpb.Result.delete:type_name -> kvpb.DeleteResponse
+	19, // 7: kvpb.Result.txn:type_name -> kvpb.TxnResponse
+	3,  // 8: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 9: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
+	3,  // 10: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 11: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 12: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 13: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 14: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 15: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
+	1,  // 16: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
+	2,  // 17: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
+	9,  // 18: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
+	11, // 19: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
+	13, // 20: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
+	10, // 21: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
+	12, // 22: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
+	14, // 23: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
+	15, // 24: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
+	16, // 25: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
+	16, // 26: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
+	3,  // 27: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
+	17, // 28: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
+	0,  // 29: kvpb.Event.type:type_name -> kvpb.EventType
+	4,  // 30: kvpb.Event.kv:type_name -> kvpb.KeyValue
+	4,  // 31: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 32: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 33: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 34: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 35: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
+	36, // [36:36] is the sub-list for method output_type
+	36, // [36:36] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_kv_proto_init() }
@@ -2222,16 +2329,21 @@ func file_kv_proto_init() {
 		(*Command_LeaseGrant)(nil),
 		(*Command_LeaseRevoke)(nil),
 	}
-	file_kv_proto_msgTypes[11].OneofWrappers = []any{
+	file_kv_proto_msgTypes[3].OneofWrappers = []any{
+		(*Result_Put)(nil),
+		(*Result_Delete)(nil),
+		(*Result_Txn)(nil),
+	}
+	file_kv_proto_msgTypes[12].OneofWrappers = []any{
 		(*Compare_Version)(nil),
 		(*Compare_Value)(nil),
 	}
-	file_kv_proto_msgTypes[12].OneofWrappers = []any{
+	file_kv_proto_msgTypes[13].OneofWrappers = []any{
 		(*RequestOp_Put)(nil),
 		(*RequestOp_Delete)(nil),
 		(*RequestOp_Range)(nil),
 	}
-	file_kv_proto_msgTypes[13].OneofWrappers = []any{
+	file_kv_proto_msgTypes[14].OneofWrappers = []any{
 		(*ResponseOp_Put)(nil),
 		(*ResponseOp_Delete)(nil),
 		(*ResponseOp_Range)(nil),
@@ -2242,7 +2354,7 @@ func file_kv_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kv_proto_rawDesc), len(file_kv_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
