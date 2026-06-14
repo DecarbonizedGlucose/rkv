@@ -13,6 +13,10 @@ type Storage interface {
 	Txn(rev uint64) Transaction
 
 	Close() error
+
+	Snapshot() ([]byte, error)
+	Restore(data []byte) error
+	MaxRevision() uint64
 }
 
 type Transaction interface {

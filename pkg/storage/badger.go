@@ -2,8 +2,10 @@ package storage
 
 import (
 	"bytes"
+	"encoding/gob"
 	"log"
 	"math"
+	"sort"
 
 	"github.com/DecarbonizedGlucose/rkv/pkg/util"
 	"github.com/dgraph-io/badger/v4"
@@ -82,6 +84,57 @@ func (b *BadgerStorage) Close() error {
 		return b.db.Close()
 	}
 	return nil
+}
+
+func (b *BadgerStorage) Snapshot() ([]byte, error) {
+	readTs := b.db.MaxVersion()
+	txn := b.db.NewTransactionAt(readTs, false)
+	defer txn.Discard()
+
+	it := txn.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+
+	var pairs []*util.InternalKV
+	for it.Rewind(); it.Valid(); it.Next() {
+		item := it.Item()
+		cv, err := item.ValueCopy(nil)
+		if err != nil {
+			return nil, err
+		}
+		key := item.KeyCopy(nil)
+		mrev := item.Version()
+		ikv, err := util.MakeInternalKV(nil, cv, key, mrev, mrev)
+		if err != nil {
+			return nil, err
+		}
+		pairs = append(pairs, ikv)
+	}
+
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(pairs); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (b *BadgerStorage) Restore(data []byte) error {
+	var pairs []*util.InternalKV
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&pairs); err != nil {
+		return err
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].MRevision < pairs[j].MRevision
+	})
+	for _, ikv := range pairs {
+		if _, err := b.Put(ikv.Key, ikv.Value, false, ikv.MRevision, ikv.LeaseID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *BadgerStorage) MaxRevision() uint64 {
+	return b.db.MaxVersion()
 }
 
 // NewBadgerStorage 打开或创建 BadgerDB ManagedDB 实例。
