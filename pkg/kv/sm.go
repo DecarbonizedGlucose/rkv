@@ -112,7 +112,10 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 	txn := sm.stor.Txn(rev)
 	defer txn.Discard()
 
-	succeeded := sm.evalComparesTxn(txn, req.Compares)
+	succeeded, err := sm.evalComparesTxn(txn, req.Compares)
+	if err != nil {
+		return nil, err
+	}
 
 	var ops []*kvpb.RequestOp
 	if succeeded {
@@ -123,10 +126,16 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 
 	responses := make([]*kvpb.ResponseOp, 0, len(ops))
 	for _, op := range ops {
-		responses = append(responses, sm.applyRequestOpTxn(txn, op))
+		resp, err := sm.applyRequestOpTxn(txn, op)
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, resp)
 	}
 
-	err := txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return nil, err
+	}
 
 	return &kvpb.Result{
 		Res: &kvpb.Result_Txn{
@@ -135,68 +144,84 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 				Responses: responses,
 			},
 		},
-	}, err
+	}, nil
 }
 
-func (sm *StateMachine) evalComparesTxn(txn storage.Transaction, compares []*kvpb.Compare) bool {
+func (sm *StateMachine) evalComparesTxn(txn storage.Transaction, compares []*kvpb.Compare) (bool, error) {
 	for _, cmp := range compares {
-		if !sm.evalCompareTxn(txn, cmp) {
-			return false
+		ok, err := sm.evalCompareTxn(txn, cmp)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
-func (sm *StateMachine) evalCompareTxn(txn storage.Transaction, cmp *kvpb.Compare) bool {
+func (sm *StateMachine) evalCompareTxn(txn storage.Transaction, cmp *kvpb.Compare) (bool, error) {
 	ikv, err := txn.Get(cmp.Key)
+	// key 不存在不是错误，按零值参与比较；其余存储错误需上报。
+	if err != nil && err != storage.ErrKeyNotFound {
+		return false, err
+	}
+	found := err == nil
 	switch cmp.Target {
 	case kvpb.Compare_VERSION:
 		modRev := uint64(0)
-		if err == nil {
+		if found {
 			modRev = ikv.MRevision
 		}
-		return compareInt(modRev, cmp.Result, cmp.GetVersion())
+		return compareInt(modRev, cmp.Result, cmp.GetVersion()), nil
 	case kvpb.Compare_CREATE:
 		cRev := uint64(0)
-		if err == nil {
+		if found {
 			cRev = ikv.CRevision
 		}
-		return compareInt(cRev, cmp.Result, cmp.GetVersion())
+		return compareInt(cRev, cmp.Result, cmp.GetVersion()), nil
 	case kvpb.Compare_VALUE:
-		if err == storage.ErrKeyNotFound {
-			return compareBytes(nil, cmp.Result, cmp.GetValue())
+		if !found {
+			return compareBytes(nil, cmp.Result, cmp.GetValue()), nil
 		}
-		return compareBytes(ikv.Value, cmp.Result, cmp.GetValue())
+		return compareBytes(ikv.Value, cmp.Result, cmp.GetValue()), nil
 	case kvpb.Compare_LEASE:
 		leaseID := int64(0)
-		if err == nil {
+		if found {
 			leaseID = ikv.LeaseID
 		}
-		return compareInt(uint64(leaseID), cmp.Result, cmp.GetVersion())
+		return compareInt(uint64(leaseID), cmp.Result, cmp.GetVersion()), nil
 	default:
-		return false
+		return false, nil
 	}
 }
 
-func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.RequestOp) *kvpb.ResponseOp {
+func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.RequestOp) (*kvpb.ResponseOp, error) {
 	switch {
 	case op.GetPut() != nil:
 		prevKV, err := txn.Put(op.GetPut().Key, op.GetPut().Value, op.GetPut().PrevKv > 0, op.GetPut().Lease)
+		if err != nil {
+			return nil, err
+		}
 		res := &kvpb.PutResponse{}
-		if err == nil && prevKV != nil {
+		if prevKV != nil {
 			res.PrevKv = prevKV.ToProto()
 		}
-		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Put{Put: res}}
+		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Put{Put: res}}, nil
 	case op.GetDelete() != nil:
 		prevKV, err := txn.Delete(op.GetDelete().Key, op.GetDelete().PrevKv > 0)
 		res := &kvpb.DeleteResponse{}
-		if err == nil {
+		if err == storage.ErrKeyNotFound {
+			res.Deleted = 0
+		} else if err != nil {
+			return nil, err
+		} else {
 			res.Deleted = 1
 			if prevKV != nil {
 				res.PrevKv = prevKV.ToProto()
 			}
 		}
-		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Delete{Delete: res}}
+		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Delete{Delete: res}}, nil
 	case op.GetRange() != nil:
 		req := op.GetRange()
 		start := req.RangeStart
@@ -204,16 +229,19 @@ func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.Requ
 		if len(end) == 0 {
 			end = nil
 		}
-		ikvs, more, _ := txn.Range(start, end, int(req.Limit), nil)
+		ikvs, more, err := txn.Range(start, end, int(req.Limit), nil)
+		if err != nil {
+			return nil, err
+		}
 		kvs := make([]*kvpb.KeyValue, 0, len(ikvs))
 		for _, ikv := range ikvs {
 			kvs = append(kvs, ikv.ToProto())
 		}
 		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Range{Range: &kvpb.RangeResponse{
 			Kvs: kvs, More: more, Count: int64(len(kvs)),
-		}}}
+		}}}, nil
 	}
-	return nil
+	return nil, ErrInvalidCommand
 }
 
 func (sm *StateMachine) SnapshotData() ([]byte, error) {

@@ -46,7 +46,10 @@ func newDeleteCmd(key string) *kvpb.Command {
 
 func newSM(t *testing.T) *StateMachine {
 	t.Helper()
-	s := storage.NewBadgerStorageInMemory()
+	s, err := storage.NewBadgerStorageInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory storage: %v", err)
+	}
 	return NewStateMachine(s, NewRevisionManager(0))
 }
 
@@ -609,7 +612,8 @@ func TestSnapshotAndRestore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, snapData)
 
-	newStor := storage.NewBadgerStorageInMemory()
+	newStor, err := storage.NewBadgerStorageInMemory()
+	require.NoError(t, err)
 	newSM := NewStateMachine(newStor, NewRevisionManager(0))
 	err = newSM.ApplySnapshot(&raftpb.Snapshot{Data: snapData})
 	require.NoError(t, err)
