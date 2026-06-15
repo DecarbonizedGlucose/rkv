@@ -157,7 +157,6 @@ func (s *KVServer) makeHeader() *kvpb.ResponseHeader {
 }
 
 func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
-	rev := s.revMgr.Next()
 	pid := s.pid.Add(1)
 
 	cmdBytes, err := proto.Marshal(cmd)
@@ -165,6 +164,10 @@ func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
 		log.Printf("KVServer: marshal command: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
+	// revision 在所有可能失败的准备工作（proto.Marshal）之后分配，
+	// 避免浪费。此点之后的 gob 编码（marshalProposalOperation）永不失败，
+	// n.Propose 失败产生的 revision 缺口对 BadgerDB 无害（版本只需单调）。
+	rev := s.revMgr.Next()
 	op := &proposalOperation{
 		ProposalID: pid,
 		Revision:   rev,

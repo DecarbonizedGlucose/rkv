@@ -55,11 +55,11 @@ func (rn *RawNode) Tick() {
 	rn.Raft.tick()
 }
 
-func (rn *RawNode) Campaign() {
+func (rn *RawNode) Campaign() error {
 	msg := &raftpb.RaftMessage{
 		Type: raftpb.MessageType_HUP,
 	}
-	rn.Raft.step(msg)
+	return rn.Raft.step(msg)
 }
 
 func (rn *RawNode) Propose(data []byte) error {
