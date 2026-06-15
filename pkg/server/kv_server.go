@@ -16,6 +16,8 @@ import (
 )
 
 type Server struct {
+	ctx context.Context
+
 	kvServer   *kv.KVServer
 	grpcServer *grpc.Server
 
@@ -27,18 +29,29 @@ type Server struct {
 	o *option.Option
 }
 
-func NewServer(o *option.Option) (*Server, error) {
+func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
+	s := &Server{
+		ctx: ctx,
+		o:   o,
+	}
 	if err := o.Validate(); err != nil {
 		return nil, err
 	}
-	raftStor, err := raftstore.NewRaftStorage(o.RaftDir)
+
+	raftStor, err := raftstore.NewRaftStorage(o.RaftDir) // source 1
 	if err != nil {
+		defer s.tryRelease()
 		return nil, err
 	}
-	kvStor, maxRev, err := storage.NewBadgerStorage(o.DataDir)
+	s.raftStor = raftStor
+
+	kvStor, maxRev, err := storage.NewBadgerStorage(o.DataDir) // source 2
 	if err != nil {
+		defer s.tryRelease()
 		return nil, err
 	}
+	s.kvStor = kvStor
+
 	revMgr := kv.NewRevisionManager(maxRev)
 	sm := kv.NewStateMachine(kvStor, revMgr)
 	trConfig := &tr.Config{
@@ -61,21 +74,22 @@ func NewServer(o *option.Option) (*Server, error) {
 		StateMachine:  sm,
 		SnapshotCount: o.SnapshotCount,
 	}
-	node, err := raftstore.NewNode(rsConfig)
+
+	node, err := raftstore.NewNode(rsConfig) // source 3
 	if err != nil {
+		defer s.tryRelease()
 		return nil, err
 	}
+	s.node = node
+
 	kvServer := kv.NewKVServer(node, kvStor, revMgr, o.NodeID)
-	return &Server{
-		kvServer: kvServer,
-		node:     node,
-		raftStor: raftStor,
-		kvStor:   kvStor,
-		o:        o,
-	}, nil
+	s.kvServer = kvServer
+	return s, nil
 }
 
-func (s *Server) Serve(ctx context.Context) error {
+func (s *Server) Serve() error {
+	defer s.tryRelease()
+
 	lis, err := net.Listen("tcp", s.o.GRPCAddr)
 	if err != nil {
 		return err
@@ -89,14 +103,26 @@ func (s *Server) Serve(ctx context.Context) error {
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-s.ctx.Done():
 		s.grpcServer.GracefulStop()
 	case err := <-errCh:
 		return err
 	}
 
-	s.node.Stop()
-	s.raftStor.Close()
-	s.kvStor.Close()
 	return nil
+}
+
+func (s *Server) tryRelease() {
+	if s.node != nil {
+		s.node.Stop()
+		s.node = nil
+	}
+	if s.raftStor != nil {
+		s.raftStor.Close()
+		s.raftStor = nil
+	}
+	if s.kvStor != nil {
+		s.kvStor.Close()
+		s.kvStor = nil
+	}
 }
