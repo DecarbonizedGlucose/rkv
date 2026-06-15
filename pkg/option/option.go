@@ -1,6 +1,10 @@
 package option
 
-import "time"
+import (
+	"fmt"
+	"slices"
+	"time"
+)
 
 // Option 是 rkv 服务节点的顶级配置结构。
 type Option struct {
@@ -8,6 +12,8 @@ type Option struct {
 	NodeID uint64
 	// Peers 是集群所有成员的 NodeID 列表。
 	Peers []uint64
+	// 节点 ID 到 RaftAddr 的映射
+	PeersAddr map[uint64]string
 	// DataDir 是业务 KV 数据 BadgerDB 的存储目录。
 	DataDir string
 	// RaftDir 是 Raft 状态 BadgerDB 的存储目录，与 DataDir 分离。
@@ -35,4 +41,75 @@ func DefaultConfig() *Option {
 		TickInterval:     100 * time.Millisecond,
 		SnapshotCount:    10000,
 	}
+}
+
+func (o *Option) SetPeers(peers []uint64, peersAddr map[uint64]string) *Option {
+	o.Peers = slices.Clone(peers)
+	o.PeersAddr = make(map[uint64]string)
+	for _, id := range o.Peers {
+		addr, ok := peersAddr[id]
+		if !ok {
+			panic(fmt.Sprintf("peer ID %d not found in peersAddr", id))
+		}
+		o.PeersAddr[id] = addr
+	}
+	return o
+}
+
+func (o *Option) SetDataDir(dataDir string) *Option {
+	o.DataDir = dataDir
+	return o
+}
+
+func (o *Option) SetRaftDir(raftDir string) *Option {
+	o.RaftDir = raftDir
+	return o
+}
+
+func (o *Option) Validate() error {
+	if o.NodeID == 0 {
+		return fmt.Errorf("NodeID must be non-zero")
+	}
+	if len(o.Peers) == 0 {
+		return fmt.Errorf("Peers must be non-empty")
+	}
+	f := false
+	for _, id := range o.Peers {
+		if id == 0 {
+			return fmt.Errorf("Peer ID must be non-zero")
+		}
+		if a, ok := o.PeersAddr[id]; !ok {
+			return fmt.Errorf("Peer ID %d not found in PeersAddr", id)
+		} else if a == o.RaftAddr {
+			f = true
+		}
+	}
+	if !f {
+		return fmt.Errorf("Peers must contain NodeID")
+	}
+	if o.DataDir == "" {
+		return fmt.Errorf("DataDir must be set")
+	}
+	if o.RaftDir == "" {
+		return fmt.Errorf("RaftDir must be set")
+	}
+	if o.TickInterval <= 0 {
+		return fmt.Errorf("TickInterval must be positive")
+	}
+	if o.SnapshotCount == 0 {
+		return fmt.Errorf("SnapshotCount must be positive")
+	}
+	if o.RaftAddr == "" {
+		return fmt.Errorf("RaftAddr must be set")
+	}
+	if o.GRPCAddr == "" {
+		return fmt.Errorf("GRPCAddr must be set")
+	}
+	if o.HeartbeatTimeout <= 0 {
+		return fmt.Errorf("HeartbeatTimeout must be positive")
+	}
+	if o.ElectionTimeout <= o.HeartbeatTimeout {
+		return fmt.Errorf("ElectionTimeout must be greater than HeartbeatTimeout")
+	}
+	return nil
 }
