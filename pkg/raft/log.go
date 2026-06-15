@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"fmt"
+
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
@@ -27,21 +29,17 @@ type RaftLog struct {
 	pendingSnapshot *raftpb.Snapshot
 }
 
-func newRaftLog(storage RaftStorage) *RaftLog {
+func newRaftLog(storage RaftStorage) (*RaftLog, error) {
 	if storage == nil {
-		panic("raft: storage must not be nil")
+		return nil, fmt.Errorf("raft: storage must not be nil")
 	}
-	// hs, _, err := storage.InitialState()
-	// if err != nil {
-	// 	panic("raft: read initial state: " + err.Error())
-	// }
 	firstIndex, err := storage.FirstIndex() // firstIndex 一定 >= 1
 	if err != nil {
-		panic("raft: read first index: " + err.Error())
+		return nil, fmt.Errorf("raft: read first index: %v", err.Error())
 	}
 	lastIndex, err := storage.LastIndex()
 	if err != nil {
-		panic("raft: read last index: " + err.Error())
+		return nil, fmt.Errorf("raft: read last index: %v", err.Error())
 	}
 	// 哨兵条目代表快照覆盖的最后一条日志
 	dummy := &raftpb.Entry{Index: firstIndex - 1}
@@ -54,7 +52,7 @@ func newRaftLog(storage RaftStorage) *RaftLog {
 	if firstIndex <= lastIndex {
 		stored, err := storage.Entries(firstIndex, lastIndex+1)
 		if err != nil {
-			panic("raft: load entries: " + err.Error())
+			return nil, fmt.Errorf("raft: load entries: %v", err.Error())
 		}
 		entries = append(entries, stored...)
 	}
@@ -66,7 +64,7 @@ func newRaftLog(storage RaftStorage) *RaftLog {
 		//committedIndex: hs.CommitIndex,
 		entries: entries,
 		//lastIncludedIndex: dummy.Index,
-	}
+	}, nil
 }
 
 func (l *RaftLog) lastLogIndex() uint64 {

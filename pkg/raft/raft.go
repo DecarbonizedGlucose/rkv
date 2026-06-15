@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"log"
 	"sort"
 
@@ -29,14 +30,14 @@ type Raft struct {
 	heartbeatElapsed int
 }
 
-func newRaft(cfg *Config) *Raft {
+func newRaft(cfg *Config) (*Raft, error) {
 	if err := cfg.validate(); err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 
 	hs, cs, err := cfg.Storage.InitialState()
 	if err != nil {
-		panic("raft: read initial state: " + err.Error())
+		return nil, fmt.Errorf("raft: read initial state: %v", err)
 	}
 
 	peers := cs.Nodes
@@ -48,17 +49,22 @@ func newRaft(cfg *Config) *Raft {
 		prs[id] = &Progress{}
 	}
 
+	log, err := newRaftLog(cfg.Storage)
+	if err != nil {
+		return nil, fmt.Errorf("raft: create log: %v", err)
+	}
+
 	return &Raft{
 		id:                        cfg.ID,
 		hardState:                 proto.Clone(hs).(*raftpb.HardState),
 		state:                     stateFollower,
 		prs:                       prs,
 		votes:                     make(map[uint64]bool),
-		raftLog:                   newRaftLog(cfg.Storage),
+		raftLog:                   log,
 		electionTimeout:           cfg.ElectionTimeout,
 		randomizedElectionTimeout: randomizedElectionTimeout(cfg.ElectionTimeout),
 		heartbeatTimeout:          cfg.HeartbeatTimeout,
-	}
+	}, nil
 }
 
 // ========================================

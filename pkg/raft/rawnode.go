@@ -30,7 +30,10 @@ type RawNode struct {
 }
 
 func NewRawNode(config *Config) (*RawNode, error) {
-	raft := newRaft(config)
+	raft, err := newRaft(config)
+	if err != nil {
+		return nil, err
+	}
 
 	return &RawNode{
 		Raft: raft,

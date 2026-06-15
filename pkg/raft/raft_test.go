@@ -23,7 +23,11 @@ func newTestConfig(id uint64, peers []uint64) *Config {
 }
 
 func newTestRaft(id uint64, peers []uint64) *Raft {
-	return newRaft(newTestConfig(id, peers))
+	r, err := newRaft(newTestConfig(id, peers))
+	if err != nil {
+		panic("newTestRaft: " + err.Error())
+	}
+	return r
 }
 
 // readMessages 读取并清空 Raft 内部消息队列

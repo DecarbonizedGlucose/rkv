@@ -229,7 +229,8 @@ func TestRaftLogNewFromStorage(t *testing.T) {
 		makeEntry(3, 1),
 	}))
 
-	l := newRaftLog(s)
+	l, err := newRaftLog(s)
+	require.NoError(t, err)
 	assert.Equal(t, uint64(3), l.lastLogIndex())
 	assert.Equal(t, uint64(0), l.getLastIncluded())
 }
