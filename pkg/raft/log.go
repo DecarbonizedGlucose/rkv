@@ -80,6 +80,7 @@ func (l *RaftLog) lastLogTerm() uint64 {
 	return l.entries[len(l.entries)-1].Term
 }
 
+// 仅标记，是修剪日志后的盖章操作，必须修剪日志后调用
 func (l *RaftLog) setLastIncluded(idx uint64) {
 	//l.lastIncludedIndex = idx
 	l.entries[0].Index = idx
