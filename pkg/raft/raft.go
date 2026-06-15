@@ -453,20 +453,21 @@ func (r *Raft) sendInstallSnapshot(to uint64) {
 
 	snapshot, err := r.raftLog.storage.Snapshot()
 	if err == ErrSnapshotTemporarilyUnavailable {
-		log.Printf("raft[%d]: snapshot temporarily unavailable for peer %d, skip", r.id, to)
+		// 快照尚未就绪，等下次心跳重试，属正常路径，不记录。
 		return
 	}
 	if err != nil {
 		log.Printf("raft[%d]: read snapshot for peer %d: %v", r.id, to, err)
 		return
 	}
+	if snapshot.Metadata == nil {
+		// Metadata 为 nil 是本地构造 bug，不会因重试而自愈。
+		log.Printf("raft[%d]: BUG: snapshot metadata is nil, cannot send to peer %d", r.id, to)
+		return
+	}
 	data, err := proto.Marshal(snapshot)
 	if err != nil {
 		log.Printf("raft[%d]: marshal snapshot for peer %d: %v", r.id, to, err)
-		return
-	}
-	if snapshot.Metadata == nil {
-		log.Printf("raft[%d]: snapshot metadata is nil", r.id)
 		return
 	}
 	req := &raftpb.InstallSnapshotRequest{

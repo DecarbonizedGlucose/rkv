@@ -3,9 +3,10 @@ package raft_transport
 import (
 	"context"
 	"fmt"
-	"io"
+	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
@@ -26,7 +27,8 @@ type RGTransport struct {
 	selfAddr  string
 	peerAddrs map[uint64]string // map peerID -> addr
 
-	recvCh chan *raftpb.RaftMessage // 接收消息的通道
+	recvCh         chan *raftpb.RaftMessage // 接收消息的通道
+	dropCounter    atomic.Uint64           // 因队列满丢弃的消息计数
 
 	mu    sync.RWMutex
 	sends map[uint64]peerStream
@@ -78,7 +80,12 @@ func (t *RGTransport) Start() error {
 	t.grpcSrv = grpc.NewServer(grpc.KeepaliveParams(kaParams))
 	raftpb.RegisterRaftTransportServer(t.grpcSrv, &serverHandler{t: t})
 
-	go t.grpcSrv.Serve(lis)
+	go func() {
+		if err := t.grpcSrv.Serve(lis); err != nil {
+			// GracefulStop/Stop 触发时 Serve 返回 nil，其余均属意外错误。
+			log.Printf("raft_transport: grpc server exited: %v", err)
+		}
+	}()
 
 	for id, addr := range t.peerAddrs {
 		if id == t.nodeID {
@@ -155,10 +162,6 @@ func (t *RGTransport) establishStream(peerID uint64, addr string) error {
 		}),
 	)
 	if err != nil {
-		if err == io.EOF {
-			// 连接被对方拒绝或关闭，等待重试
-			return nil
-		}
 		return err
 	}
 	defer conn.Close()
@@ -200,7 +203,12 @@ func (t *RGTransport) serveStream(peerID uint64, stream peerStream) error {
 		case <-t.ctx.Done():
 			return t.ctx.Err()
 		default:
-			// 队列满丢弃
+			// recvCh 满，消息被丢弃。Raft 依赖重传，单次丢弃不影响正确性，
+			// 但持续丢弃说明消费跟不上（可能 run goroutine 卡住），需告警。
+			cnt := t.dropCounter.Add(1)
+			if cnt&(cnt-1) == 0 { // 指数采样：1,2,4,8… 次才打印
+				log.Printf("raft_transport: recv queue full, dropped message from peer %d (total dropped=%d)", peerID, cnt)
+			}
 		}
 	}
 }
