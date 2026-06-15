@@ -138,8 +138,10 @@ func NewNode(cfg *Config) (*Node, error) {
 	return n, nil
 }
 
-// 将数据提交到 Raft 日志中，阻塞直到日志追加完成（尚未 commit）。
+// 将数据提交到 Raft 日志中，直到日志被应用返回。
 // 若当前节点不是 Leader 则返回 ErrNotLeader。
+//
+// 返回的 []byte 是 proposalResult marshalled 后的结果。
 func (n *Node) Propose(data []byte, proposalID uint64) ([]byte, error) {
 	p := &proposal{
 		data:       data,
