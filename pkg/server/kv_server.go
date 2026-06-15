@@ -13,6 +13,7 @@ import (
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 type Server struct {
@@ -96,6 +97,7 @@ func (s *Server) Serve() error {
 	}
 	s.grpcServer = grpc.NewServer()
 	rpcpb.RegisterKVServiceServer(s.grpcServer, s.kvServer)
+	reflection.Register(s.grpcServer) // 适配 grpcurl
 
 	errCh := make(chan error, 1)
 	go func() {
