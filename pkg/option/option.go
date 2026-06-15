@@ -43,17 +43,17 @@ func DefaultConfig() *Option {
 	}
 }
 
-func (o *Option) SetPeers(peers []uint64, peersAddr map[uint64]string) *Option {
+func (o *Option) SetPeers(peers []uint64, peersAddr map[uint64]string) error {
 	o.Peers = slices.Clone(peers)
 	o.PeersAddr = make(map[uint64]string)
 	for _, id := range o.Peers {
 		addr, ok := peersAddr[id]
 		if !ok {
-			panic(fmt.Sprintf("peer ID %d not found in peersAddr", id))
+			return fmt.Errorf("peer ID %d not found in peersAddr", id)
 		}
 		o.PeersAddr[id] = addr
 	}
-	return o
+	return nil
 }
 
 func (o *Option) SetDataDir(dataDir string) *Option {
