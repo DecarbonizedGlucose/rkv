@@ -244,7 +244,7 @@ func (n *Node) processReady() {
 	if err != nil {
 		if errors.Is(err, ErrApplyCorrupted) {
 			// 永久性错误
-			log.Fatalf("raftstore: unrecoverable apply error, exiting: %v\n", err)
+			log.Printf("raftstore: unrecoverable apply error, exiting: %v\n", err)
 		}
 		// 可重试错误
 		log.Printf("raftstore: apply failed, will retry: %v\n", err)
@@ -272,10 +272,12 @@ func (n *Node) applySnapshot(rd *raft.Ready) {
 		return
 	}
 	if err := n.storage.ApplySnapshot(rd.Snapshot); err != nil {
-		panic("raftstore: apply snapshot to storage: " + err.Error())
+		log.Printf("raftstore: apply snapshot to storage: %v", err.Error())
+		return
 	}
 	if err := n.sm.ApplySnapshot(rd.Snapshot); err != nil {
-		panic("raftstore: apply snapshot to state machine: " + err.Error())
+		log.Printf("raftstore: apply snapshot to state machine: %v", err.Error())
+		return
 	}
 }
 
@@ -286,7 +288,8 @@ func (n *Node) persistHardState(rd *raft.Ready) {
 	}
 	n.raftTerm.Store(rd.HardState.Term) // 对外暴露
 	if err := n.storage.SaveHardState(rd.HardState); err != nil {
-		panic("raftstore: persist HardState: " + err.Error())
+		log.Printf("raftstore: persist HardState: %v", err.Error())
+		return
 	}
 }
 
@@ -296,7 +299,8 @@ func (n *Node) appendEntries(rd *raft.Ready) {
 		return
 	}
 	if err := n.storage.Append(rd.Entries); err != nil {
-		panic("raftstore: append entries: " + err.Error())
+		log.Printf("raftstore: append entries: %v", err.Error())
+		return
 	}
 }
 
