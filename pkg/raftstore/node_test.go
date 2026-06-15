@@ -27,9 +27,9 @@ func newMockTransport() *mockTransport {
 }
 
 func (m *mockTransport) Send(msg *raftpb.RaftMessage) error { return nil }
-func (m *mockTransport) Recv() <-chan *raftpb.RaftMessage    { return m.recvCh }
-func (m *mockTransport) Start() error                        { return nil }
-func (m *mockTransport) Stop() error                         { return nil }
+func (m *mockTransport) Recv() <-chan *raftpb.RaftMessage   { return m.recvCh }
+func (m *mockTransport) Start() error                       { return nil }
+func (m *mockTransport) Stop() error                        { return nil }
 
 var _ raft_transport.Transport = (*mockTransport)(nil)
 
@@ -58,8 +58,8 @@ func (sm *mockStateMachine) Apply(entries []*raftpb.Entry) (results []raftstore.
 	return results, nil
 }
 
-func (sm *mockStateMachine) SnapshotData() ([]byte, error)           { return nil, nil }
-func (sm *mockStateMachine) ApplySnapshot(*raftpb.Snapshot) error    { return nil }
+func (sm *mockStateMachine) SnapshotData() ([]byte, error)        { return nil, nil }
+func (sm *mockStateMachine) ApplySnapshot(*raftpb.Snapshot) error { return nil }
 
 func (sm *mockStateMachine) appliedData() [][]byte {
 	sm.mu.Lock()
@@ -225,4 +225,8 @@ func (w *wrappedStorage) Append(entries []*raftpb.Entry) error {
 
 func (w *wrappedStorage) Compact(idx uint64) error {
 	return w.MemoryStorage.Compact(idx)
+}
+
+func (w *wrappedStorage) Close() error {
+	return nil
 }

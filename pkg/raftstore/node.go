@@ -38,6 +38,8 @@ type Storage interface {
 	ApplySnapshot(snap *raftpb.Snapshot) error
 	CreateSnapshot(idx uint64, cs *raftpb.ConfState, data []byte) error
 	Compact(idx uint64) error
+
+	Close() error
 }
 
 // proposal 将待提案数据与结果通道绑定，供 run goroutine 消费。
@@ -61,6 +63,8 @@ type Node struct {
 
 	// 从 Ready.SoftState 中提取，通过 LeaderID() 对外暴露。
 	leaderID atomic.Uint64
+
+	raftTerm atomic.Uint64
 
 	snapshotCount uint64
 	tickInterval  time.Duration
@@ -171,6 +175,10 @@ func (n *Node) LeaderID() uint64 {
 	return n.leaderID.Load()
 }
 
+func (n *Node) Term() uint64 {
+	return n.raftTerm.Load()
+}
+
 // 关闭节点，丢弃所有未完成的提案。
 func (n *Node) Stop() {
 	select {
@@ -274,6 +282,7 @@ func (n *Node) persistHardState(rd *raft.Ready) {
 	if rd.HardState == nil {
 		return
 	}
+	n.raftTerm.Store(rd.HardState.Term) // 对外暴露
 	if err := n.storage.SaveHardState(rd.HardState); err != nil {
 		panic("raftstore: persist HardState: " + err.Error())
 	}
