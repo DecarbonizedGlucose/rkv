@@ -41,7 +41,7 @@ func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionMan
 
 func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Printf("KVServer: get request rejected, not leader")
+		log.Println("KVServer: get request rejected, not leader")
 		return nil, status.Error(codes.Unavailable, "not leader")
 	}
 	ikv, err := s.stor.Get(req.Key, s.revMgr.Peek())
@@ -63,7 +63,7 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 
 func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.RangeResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Printf("KVServer: range request rejected, not leader")
+		log.Println("KVServer: range request rejected, not leader")
 		return nil, status.Error(codes.Unavailable, "not leader")
 	}
 	end := req.RangeEnd
@@ -91,7 +91,7 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 
 func (s *KVServer) Put(ctx context.Context, req *kvpb.PutRequest) (*kvpb.PutResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Printf("KVServer: put request rejected, not leader")
+		log.Println("KVServer: put request rejected, not leader")
 		return nil, status.Error(codes.Unavailable, "not leader")
 	}
 	res, err := s.proposeWrite(&kvpb.Command{
@@ -107,7 +107,7 @@ func (s *KVServer) Put(ctx context.Context, req *kvpb.PutRequest) (*kvpb.PutResp
 
 func (s *KVServer) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.DeleteResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Printf("KVServer: delete request rejected, not leader")
+		log.Println("KVServer: delete request rejected, not leader")
 		return nil, status.Error(codes.Unavailable, "not leader")
 	}
 	res, err := s.proposeWrite(&kvpb.Command{
@@ -123,7 +123,7 @@ func (s *KVServer) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.D
 
 func (s *KVServer) Txn(ctx context.Context, req *kvpb.TxnRequest) (*kvpb.TxnResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Printf("KVServer: txn request rejected, not leader")
+		log.Println("KVServer: txn request rejected, not leader")
 		return nil, status.Error(codes.Unavailable, "not leader")
 	}
 	res, err := s.proposeWrite(&kvpb.Command{
@@ -178,7 +178,7 @@ func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
 	resultBytes, err := s.node.Propose(data, pid) // 日志真正被应用
 	if err != nil {
 		if err == raftstore.ErrNotLeader {
-			log.Printf("KVServer: propose rejected, not leader")
+			log.Println("KVServer: propose rejected, not leader")
 			return nil, status.Error(codes.Unavailable, "not leader")
 		}
 		log.Printf("KVServer: propose: %v", err)
