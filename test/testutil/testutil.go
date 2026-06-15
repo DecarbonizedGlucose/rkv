@@ -9,7 +9,10 @@ import (
 // NewTestStorage 创建纯内存的 BadgerStorage 并返回销毁函数。
 func NewTestStorage(t *testing.T) (storage.Storage, func()) {
 	t.Helper()
-	s := storage.NewBadgerStorageInMemory()
+	s, err := storage.NewBadgerStorageInMemory()
+	if err != nil {
+		t.Fatalf("open in-memory storage: %v", err)
+	}
 	return s, func() {
 		if err := s.Close(); err != nil {
 			t.Errorf("close test storage: %v", err)

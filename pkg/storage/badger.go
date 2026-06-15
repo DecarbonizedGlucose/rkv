@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"log"
 	"math"
 	"sort"
 
@@ -153,15 +152,15 @@ func NewBadgerStorage(dir string) (Storage, uint64, error) {
 }
 
 // NewBadgerStorageInMemory 创建纯内存的 BadgerStorage 实例，用于测试。
-func NewBadgerStorageInMemory() Storage {
+func NewBadgerStorageInMemory() (Storage, error) {
 	opts := badger.DefaultOptions("").
 		WithInMemory(true).
 		WithNumVersionsToKeep(math.MaxInt32)
 	db, err := badger.OpenManaged(opts)
 	if err != nil {
-		log.Fatal(fmt.Errorf("open kv storage: %w", err))
+		return nil, fmt.Errorf("open in-memory kv storage: %w", err)
 	}
-	return &BadgerStorage{db: db}
+	return &BadgerStorage{db: db}, nil
 }
 
 type BadgerTransaction struct {
