@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,12 +67,20 @@ type Node struct {
 
 	raftTerm atomic.Uint64
 
-	snapshotCount uint64
-	tickInterval  time.Duration
+	snapshotCount  uint64
+	tickInterval   time.Duration
+	sendErrCounter atomic.Uint64 // 发送失败计数，用于限流日志
 
-	ticker *time.Ticker
-	stopCh chan struct{}
-	doneCh chan struct{}
+	ticker   *time.Ticker
+	stopOnce sync.Once
+	stopCh   chan struct{}
+	doneCh   chan struct{}
+
+	// fatalCh 在 run goroutine 遇到不可恢复错误（持久化失败、apply 损坏）时关闭，
+	// fatalErr 记录原因。Server 通过 Done()/Err() 感知并走有序释放路径，
+	// 而非在底层 os.Exit 跳过资源清理。
+	fatalCh  chan struct{}
+	fatalErr error
 }
 
 // Config 包含创建 Node 所需的全部参数。
@@ -132,6 +141,7 @@ func NewNode(cfg *Config) (*Node, error) {
 		ticker:        time.NewTicker(tickInterval),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
+		fatalCh:       make(chan struct{}),
 	}
 
 	go n.run()
@@ -181,15 +191,37 @@ func (n *Node) Term() uint64 {
 	return n.raftTerm.Load()
 }
 
-// 关闭节点，丢弃所有未完成的提案。
+// 关闭节点，丢弃所有未完成的提案。可重复调用。
 func (n *Node) Stop() {
-	select {
-	case <-n.stopCh:
-		return // already stopped
-	default:
-		close(n.stopCh)
-	}
+	n.triggerStop()
 	<-n.doneCh
+}
+
+// triggerStop 关闭 stopCh，幂等。Stop 和 markFatal
+// 都通过它发起停机，由 sync.Once 保证 stopCh 只关一次。
+func (n *Node) triggerStop() {
+	n.stopOnce.Do(func() {
+		close(n.stopCh)
+	})
+}
+
+// Done 在节点因不可恢复错误自行停机时关闭，供 Server 感知后释放资源。
+// 正常 Stop() 不会关闭它。
+func (n *Node) Done() <-chan struct{} {
+	return n.fatalCh
+}
+
+// Err 返回导致节点致命停机的错误。仅在 Done() 关闭后读取才有意义。
+func (n *Node) Err() error {
+	return n.fatalErr
+}
+
+// markFatal 仅由 run goroutine 调用：记录致命错误、关闭 fatalCh 通知 Server，
+// 并发起停机。fatalErr 必须在关闭 fatalCh 前写入，保证 Server 观察到关闭后能读到。
+func (n *Node) markFatal(err error) {
+	n.fatalErr = err
+	close(n.fatalCh)
+	n.triggerStop()
 }
 
 // 主循环，串行处理 tick、网络消息、提案和 Ready。
@@ -222,33 +254,45 @@ func (n *Node) run() {
 		if !n.rn.HasReady() {
 			continue
 		}
-		n.processReady()
+		if err := n.processReady(); err != nil {
+			// 持久化失败或 apply 损坏：不可恢复。记录后发起有序停机，
+			// 由 Server 经 Done() 感知并释放资源，绝不在此 os.Exit。
+			log.Printf("raftstore: fatal error in ready loop, shutting down: %v\n", err)
+			n.markFatal(err)
+			return
+		}
 	}
 }
 
 // processReady 消费单轮 Ready，按规范顺序处理。
 // 顺序不可任意调整：快照必须先于新日志应用，HardState 必须先于 entries 持久化。
-func (n *Node) processReady() {
+//
+// 返回非 nil error 表示发生不可恢复故障（持久化失败 / apply 损坏）：
+// 此时不发送消息、不 apply、不 Advance，由调用方走有序停机。
+// 一旦中途失败即返回，避免把"未落盘"的状态当成"已落盘"推进，导致数据丢失。
+func (n *Node) processReady() error {
 	rd := n.rn.Ready()
 
-	// 持久化
-	n.applySnapshot(&rd)
-	n.persistHardState(&rd)
-	n.appendEntries(&rd)
+	// 持久化：任一失败都属致命，立即返回，绝不继续推进。
+	if err := n.applySnapshot(&rd); err != nil {
+		return fmt.Errorf("apply snapshot: %w", err)
+	}
+	if err := n.persistHardState(&rd); err != nil {
+		return fmt.Errorf("persist hard state: %w", err)
+	}
+	if err := n.appendEntries(&rd); err != nil {
+		return fmt.Errorf("append entries: %w", err)
+	}
 
-	// 发送消息
+	// 发送消息（失败可容忍，仅记录）。必须在持久化成功之后。
 	n.sendMessages(rd.Messages)
 
-	// 应用已提交的日志条目到状态机
+	// 应用已提交的日志条目到状态机。apply 失败一律视为不可恢复：
+	// 不推进 appliedIndex 会让 HasReady() 持续为真，故此处
+	// 直接上报致命错误。
 	results, err := n.applyCommittedEntries(&rd)
 	if err != nil {
-		if errors.Is(err, ErrApplyCorrupted) {
-			// 永久性错误
-			log.Printf("raftstore: unrecoverable apply error, exiting: %v\n", err)
-		}
-		// 可重试错误
-		log.Printf("raftstore: apply failed, will retry: %v\n", err)
-		return
+		return fmt.Errorf("apply committed entries: %w", err)
 	}
 
 	// 可能触发创建新快照并压缩旧日志
@@ -264,53 +308,57 @@ func (n *Node) processReady() {
 			p.resultCh <- r.Data
 		}
 	}
+	return nil
 }
 
 // 将快照写入存储并恢复状态机，Follower 侧收到快照时触发。
-func (n *Node) applySnapshot(rd *raft.Ready) {
+// 返回 error 表示持久化或状态机恢复失败，属不可恢复。
+func (n *Node) applySnapshot(rd *raft.Ready) error {
 	if rd.Snapshot == nil {
-		return
+		return nil
 	}
 	if err := n.storage.ApplySnapshot(rd.Snapshot); err != nil {
-		log.Printf("raftstore: apply snapshot to storage: %v", err.Error())
-		return
+		return fmt.Errorf("snapshot to storage: %w", err)
 	}
 	if err := n.sm.ApplySnapshot(rd.Snapshot); err != nil {
-		log.Printf("raftstore: apply snapshot to state machine: %v", err.Error())
-		return
+		return fmt.Errorf("snapshot to state machine: %w", err)
 	}
+	return nil
 }
 
-// 持久化 term、vote、commit 等状态。
-func (n *Node) persistHardState(rd *raft.Ready) {
+// 持久化 term、vote、commit 等状态。返回 error 属不可恢复。
+func (n *Node) persistHardState(rd *raft.Ready) error {
 	if rd.HardState == nil {
-		return
+		return nil
 	}
-	n.raftTerm.Store(rd.HardState.Term) // 对外暴露
 	if err := n.storage.SaveHardState(rd.HardState); err != nil {
-		log.Printf("raftstore: persist HardState: %v", err.Error())
-		return
+		return err
 	}
+	// 仅在落盘成功后才对外暴露，避免外部读到未持久化的 term。
+	n.raftTerm.Store(rd.HardState.Term)
+	return nil
 }
 
-// 将不稳定日志条目写入持久化存储。
-func (n *Node) appendEntries(rd *raft.Ready) {
+// 将不稳定日志条目写入持久化存储。返回 error 属不可恢复。
+func (n *Node) appendEntries(rd *raft.Ready) error {
 	if len(rd.Entries) == 0 {
-		return
+		return nil
 	}
-	if err := n.storage.Append(rd.Entries); err != nil {
-		log.Printf("raftstore: append entries: %v", err.Error())
-		return
-	}
+	return n.storage.Append(rd.Entries)
 }
 
 // 将 Raft 消息通过 Transport 发出。
-// 发送失败可容忍。
+// 发送失败对 Raft 协议可容忍（心跳会重发），但持续失败意味着连接断开，
+// 使用指数采样避免在重连期间刷屏：第 1、2、4、8… 次才打印。
 func (n *Node) sendMessages(msgs []*raftpb.RaftMessage) {
 	for _, msg := range msgs {
 		if err := n.transport.Send(msg); err != nil {
-			// 消息发送失败，暂时考虑记录。之后可改进为重试机制。
-			log.Printf("raftstore: send message to node %d: %v\n", msg.To, err)
+			cnt := n.sendErrCounter.Add(1)
+			if cnt&(cnt-1) == 0 { // 仅在 cnt 为 2 的幂时打印
+				log.Printf("raftstore: send message to node %d failed (count=%d): %v", msg.To, cnt, err)
+			}
+		} else {
+			n.sendErrCounter.Store(0) // 成功后重置，下次失败从 1 开始
 		}
 	}
 }
@@ -325,6 +373,7 @@ func (n *Node) applyCommittedEntries(rd *raft.Ready) ([]ApplyResult, error) {
 }
 
 // 在日志量超过阈值时创建快照并压缩旧日志。
+// 快照失败不是致命错误，下一轮还能再试，但必须记录，否则 WAL 无限增长时无从排查。
 func (n *Node) maybeSnapshot(rd *raft.Ready) {
 	if len(rd.CommittedEntries) == 0 {
 		return
@@ -334,6 +383,7 @@ func (n *Node) maybeSnapshot(rd *raft.Ready) {
 
 	firstIndex, err := n.storage.FirstIndex()
 	if err != nil {
+		log.Printf("raftstore: maybeSnapshot: read first index: %v", err)
 		return
 	}
 	if lastIndex-firstIndex < n.snapshotCount {
@@ -341,17 +391,21 @@ func (n *Node) maybeSnapshot(rd *raft.Ready) {
 	}
 	data, err := n.sm.SnapshotData()
 	if err != nil {
+		log.Printf("raftstore: maybeSnapshot: get snapshot data: %v", err)
 		return
 	}
 	_, cs, err := n.storage.InitialState()
 	if err != nil {
+		log.Printf("raftstore: maybeSnapshot: read conf state: %v", err)
 		return
 	}
 	if err := n.storage.CreateSnapshot(lastIndex, cs, data); err != nil {
+		log.Printf("raftstore: maybeSnapshot: create snapshot at index %d: %v", lastIndex, err)
 		return
 	}
 	if err := n.storage.Compact(lastIndex); err != nil {
-		return
+		// 快照已成功，日志压缩失败只是多占空间，下次重启会重新压缩。
+		log.Printf("raftstore: maybeSnapshot: compact log up to index %d: %v", lastIndex, err)
 	}
 }
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net"
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
@@ -23,9 +24,10 @@ type Server struct {
 	grpcServer *grpc.Server
 
 	// 资源释放
-	node     *raftstore.Node
-	raftStor raftstore.Storage
-	kvStor   storage.Storage
+	node      *raftstore.Node
+	transport tr.Transport
+	raftStor  raftstore.Storage
+	kvStor    storage.Storage
 
 	o *option.Option
 }
@@ -61,6 +63,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 		SelfAddr: o.RaftAddr,
 	}
 	transport := tr.New(trConfig)
+	s.transport = transport
 	raftConfig := &raft.Config{
 		ID:               o.NodeID,
 		Peers:            o.Peers,
@@ -106,25 +109,45 @@ func (s *Server) Serve() error {
 
 	select {
 	case <-s.ctx.Done():
+		// 收到退出信号，优雅停机。
 		s.grpcServer.GracefulStop()
+		return nil
+	case <-s.node.Done():
+		// 节点因不可恢复错误自行停机：停掉 gRPC 拒绝新请求，
+		// 然后经 defer tryRelease 释放存储，返回致命错误供上层决定退出码。
+		s.grpcServer.GracefulStop()
+		return s.node.Err()
 	case err := <-errCh:
+		// gRPC Serve 自身出错（如端口被占）。
 		return err
 	}
-
-	return nil
 }
 
+// tryRelease 按依赖反序释放资源，幂等可重复调用。
+// 顺序：先停 Node（停止对两个存储的读写）-> 停 Transport -> 关 Raft 存储 -> 关 KV 存储。
 func (s *Server) tryRelease() {
 	if s.node != nil {
-		s.node.Stop()
+		s.node.Stop() // 其内部 run goroutine 退出时会 Stop transport
 		s.node = nil
 	}
+	if s.transport != nil {
+		// Node 不存在（如NewNode 中途失败）时 transport 可能仍在运行；
+		// Stop 幂等，重复调用安全。
+		if err := s.transport.Stop(); err != nil {
+			log.Printf("server: stop transport: %v", err)
+		}
+		s.transport = nil
+	}
 	if s.raftStor != nil {
-		s.raftStor.Close()
+		if err := s.raftStor.Close(); err != nil {
+			log.Printf("server: close raft storage: %v", err)
+		}
 		s.raftStor = nil
 	}
 	if s.kvStor != nil {
-		s.kvStor.Close()
+		if err := s.kvStor.Close(); err != nil {
+			log.Printf("server: close kv storage: %v", err)
+		}
 		s.kvStor = nil
 	}
 }
