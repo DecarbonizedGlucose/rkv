@@ -7,8 +7,9 @@ import (
 	"math"
 	"sort"
 
-	"github.com/DecarbonizedGlucose/rkv/pkg/util"
 	"github.com/dgraph-io/badger/v4"
+
+	"github.com/DecarbonizedGlucose/rkv/pkg/util"
 )
 
 // BadgerStorage 是 Storage 接口的 BadgerDB 实现，使用 ManagedDB 手动控制版本号。

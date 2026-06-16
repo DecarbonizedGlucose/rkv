@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 )
 
 type proposalOperation struct {

@@ -3,11 +3,12 @@ package kv
 import (
 	"errors"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
-	"google.golang.org/protobuf/proto"
 )
 
 var ErrInvalidCommand = errors.New("invalid command")

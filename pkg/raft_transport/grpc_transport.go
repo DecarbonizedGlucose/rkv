@@ -9,10 +9,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
 // 统一 BidiStreamingClient / BidiStreamingServer
@@ -27,8 +28,8 @@ type RGTransport struct {
 	selfAddr  string
 	peerAddrs map[uint64]string // map peerID -> addr
 
-	recvCh         chan *raftpb.RaftMessage // 接收消息的通道
-	dropCounter    atomic.Uint64           // 因队列满丢弃的消息计数
+	recvCh      chan *raftpb.RaftMessage // 接收消息的通道
+	dropCounter atomic.Uint64            // 因队列满丢弃的消息计数
 
 	mu    sync.RWMutex
 	sends map[uint64]peerStream

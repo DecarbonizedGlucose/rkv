@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"flag"
 	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
-
-	"flag"
 
 	"github.com/DecarbonizedGlucose/rkv/pkg/option"
 	"github.com/DecarbonizedGlucose/rkv/pkg/server"

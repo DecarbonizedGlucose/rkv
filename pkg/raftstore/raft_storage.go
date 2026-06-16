@@ -5,10 +5,11 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
-	"github.com/DecarbonizedGlucose/rkv/pkg/raft"
 	"github.com/dgraph-io/badger/v4"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
+	"github.com/DecarbonizedGlucose/rkv/pkg/raft"
 )
 
 const (

@@ -5,8 +5,9 @@ import (
 	"log"
 	"sort"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
 type Raft struct {

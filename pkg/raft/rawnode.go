@@ -1,8 +1,9 @@
 package raft
 
 import (
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
 type SoftState struct {

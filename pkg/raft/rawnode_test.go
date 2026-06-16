@@ -3,9 +3,10 @@ package raft
 import (
 	"testing"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 )
 
 // ========================================

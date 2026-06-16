@@ -7,19 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
 )
 
 const addr = "127.0.0.1:13001"
 
 var (
-	client  rpcpb.KVServiceClient
-	seq     atomic.Uint64
+	client rpcpb.KVServiceClient
+	seq    atomic.Uint64
 )
 
 func TestMain(m *testing.M) {
