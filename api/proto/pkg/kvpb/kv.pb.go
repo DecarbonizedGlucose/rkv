@@ -122,13 +122,14 @@ func (Compare_CompareResult) EnumDescriptor() ([]byte, []int) {
 	return file_kv_proto_rawDescGZIP(), []int{12, 0}
 }
 
+// CompareTarget 决定用 key 的哪个属性做比较。
 type Compare_CompareTarget int32
 
 const (
-	Compare_VERSION Compare_CompareTarget = 0 // ModRevision
-	Compare_CREATE  Compare_CompareTarget = 1 // CreateRevision
-	Compare_VALUE   Compare_CompareTarget = 2 // Value
-	Compare_LEASE   Compare_CompareTarget = 3 // LeaseID
+	Compare_VERSION Compare_CompareTarget = 0 // mod_revision
+	Compare_CREATE  Compare_CompareTarget = 1 // create_revision
+	Compare_VALUE   Compare_CompareTarget = 2 // value 字节序
+	Compare_LEASE   Compare_CompareTarget = 3 // lease_id
 )
 
 // Enum value maps for Compare_CompareTarget.
@@ -174,11 +175,12 @@ func (Compare_CompareTarget) EnumDescriptor() ([]byte, []int) {
 	return file_kv_proto_rawDescGZIP(), []int{12, 1}
 }
 
+// ResponseHeader 附在所有读/写响应中，提供集群元数据。
 type ResponseHeader struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	MemberId      uint64                 `protobuf:"varint,1,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"` // 节点在集群中的ID
-	Revision      uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`                 // 集群 revision
-	RaftTerm      uint64                 `protobuf:"varint,3,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"` // Raft 任期号
+	MemberId      uint64                 `protobuf:"varint,1,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"` // 处理请求的节点 ID
+	Revision      uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`                 // 响应时的集群全局 revision
+	RaftTerm      uint64                 `protobuf:"varint,3,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"` // 当前 Raft 任期
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,14 +236,15 @@ func (x *ResponseHeader) GetRaftTerm() uint64 {
 	return 0
 }
 
+// KeyValue 是 KV 存储中单条记录的完整视图。
 type KeyValue struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Key            []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Value          []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Revision       uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`                                   // 当前 revision
-	CreateRevision uint64                 `protobuf:"varint,4,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"` // 创建时的 revision
-	ModRevision    uint64                 `protobuf:"varint,5,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"`          // 最后修改时的 revision
-	LeaseId        int64                  `protobuf:"varint,6,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`                      // 关联的 LeaseID, 0 = 无
+	Revision       uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`                                   // 写入该版本时的全局 revision（与 mod_revision 相同）
+	CreateRevision uint64                 `protobuf:"varint,4,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"` // 该 key 首次创建时的全局 revision
+	ModRevision    uint64                 `protobuf:"varint,5,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"`          // 该 key 最后一次修改时的全局 revision
+	LeaseId        int64                  `protobuf:"varint,6,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`                      // 关联的 LeaseID；0 = 无关联
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -318,6 +321,7 @@ func (x *KeyValue) GetLeaseId() int64 {
 	return 0
 }
 
+// Command 是写入 Raft 日志的操作载荷，由 Leader 序列化后提案。
 type Command struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Op:
@@ -448,6 +452,8 @@ func (*Command_LeaseGrant) isCommand_Op() {}
 
 func (*Command_LeaseRevoke) isCommand_Op() {}
 
+// Result 是 Apply 路径产出的响应载荷，通过 ProposalID 路由回 Leader 的等待队列。
+// LeaseGrant/LeaseRevoke 由 applier 直接处理，无需序列化回 proposer，故不在此列。
 type Result struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Res:
@@ -590,11 +596,13 @@ func (x *GetRequest) GetKey() []byte {
 	return nil
 }
 
+// GetResponse 返回单个 key 的查询结果。
+// kv 为 nil 且 count=0 表示 key 不存在。
 type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	Kv            *KeyValue              `protobuf:"bytes,2,opt,name=kv,proto3" json:"kv,omitempty"`        // 不存在时为nil
-	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"` // 0 或 1
+	Kv            *KeyValue              `protobuf:"bytes,2,opt,name=kv,proto3" json:"kv,omitempty"`
+	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"` // 0 或 1；等价于 kv != nil
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -654,8 +662,8 @@ type PutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	PrevKv        int64                  `protobuf:"varint,3,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 是否返回修改前的 value
-	Lease         int64                  `protobuf:"varint,4,opt,name=lease,proto3" json:"lease,omitempty"`                 // 关联的 LeaseID, 0 = 不关联
+	PrevKv        int64                  `protobuf:"varint,3,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 非零则在响应中返回修改前的 KV
+	Lease         int64                  `protobuf:"varint,4,opt,name=lease,proto3" json:"lease,omitempty"`                 // 关联的 LeaseID；0 = 不关联
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -721,7 +729,7 @@ func (x *PutRequest) GetLease() int64 {
 type PutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	PrevKv        *KeyValue              `protobuf:"bytes,2,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 修改前的 KV（如果 prev_kv=true）
+	PrevKv        *KeyValue              `protobuf:"bytes,2,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 修改前的 KV；仅 prev_kv != 0 时填充
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -773,7 +781,7 @@ func (x *PutResponse) GetPrevKv() *KeyValue {
 type DeleteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	PrevKv        int64                  `protobuf:"varint,2,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 是否返回删除前的 value
+	PrevKv        int64                  `protobuf:"varint,2,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 非零则在响应中返回删除前的 KV
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -825,8 +833,8 @@ func (x *DeleteRequest) GetPrevKv() int64 {
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	Deleted       int64                  `protobuf:"varint,2,opt,name=deleted,proto3" json:"deleted,omitempty"`            // 删除的条数（0 或 1）
-	PrevKv        *KeyValue              `protobuf:"bytes,3,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 删除前的 KV（如果 prev_kv=true）
+	Deleted       int64                  `protobuf:"varint,2,opt,name=deleted,proto3" json:"deleted,omitempty"`            // 实际删除的条数（0 或 1）
+	PrevKv        *KeyValue              `protobuf:"bytes,3,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"` // 删除前的 KV；仅 prev_kv != 0 且 key 存在时填充
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -884,12 +892,12 @@ func (x *DeleteResponse) GetPrevKv() *KeyValue {
 
 type RangeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RangeStart    []byte                 `protobuf:"bytes,1,opt,name=range_start,json=rangeStart,proto3" json:"range_start,omitempty"` // 起始 key [start, end)
-	RangeEnd      []byte                 `protobuf:"bytes,2,opt,name=range_end,json=rangeEnd,proto3" json:"range_end,omitempty"`       // 结束 key，为空表示 [start, +inf)
-	Limit         int64                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                            // 返回上限（0 = 无限制）
-	Revision      uint64                 `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`                      // 指定 revision 读取（0 = 最新）
-	KeysOnly      bool                   `protobuf:"varint,5,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`      // 只返回 key，不返回 value
-	CountOnly     bool                   `protobuf:"varint,6,opt,name=count_only,json=countOnly,proto3" json:"count_only,omitempty"`   // 只返回计数
+	RangeStart    []byte                 `protobuf:"bytes,1,opt,name=range_start,json=rangeStart,proto3" json:"range_start,omitempty"` // 起始 key（含），不能为空
+	RangeEnd      []byte                 `protobuf:"bytes,2,opt,name=range_end,json=rangeEnd,proto3" json:"range_end,omitempty"`       // 结束 key（不含）；为空表示 [range_start, +∞)
+	Limit         int64                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                            // 最多返回条数；0 = 无限制
+	Revision      uint64                 `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`                      // 读取指定 revision 的快照；0 = 读最新
+	KeysOnly      bool                   `protobuf:"varint,5,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`      // 只返回 key，value 置空
+	CountOnly     bool                   `protobuf:"varint,6,opt,name=count_only,json=countOnly,proto3" json:"count_only,omitempty"`   // 只返回 count，kvs 置空
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -970,8 +978,8 @@ type RangeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
 	Kvs           []*KeyValue            `protobuf:"bytes,2,rep,name=kvs,proto3" json:"kvs,omitempty"`
-	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	More          bool                   `protobuf:"varint,4,opt,name=more,proto3" json:"more,omitempty"` // 是否有 limit 外的更多？
+	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"` // 实际返回的条数（受 limit 约束）
+	More          bool                   `protobuf:"varint,4,opt,name=more,proto3" json:"more,omitempty"`   // 是否存在 limit 外的更多结果
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1034,6 +1042,7 @@ func (x *RangeResponse) GetMore() bool {
 	return false
 }
 
+// Compare 描述一个比较条件：target 字段的值与 target_value 做 result 比较。
 type Compare struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Result Compare_CompareResult  `protobuf:"varint,1,opt,name=result,proto3,enum=kvpb.Compare_CompareResult" json:"result,omitempty"`
@@ -1129,11 +1138,11 @@ type isCompare_TargetValue interface {
 }
 
 type Compare_Version struct {
-	Version uint64 `protobuf:"varint,4,opt,name=version,proto3,oneof"` // revision / lease
+	Version uint64 `protobuf:"varint,4,opt,name=version,proto3,oneof"` // 用于 VERSION / CREATE / LEASE 比较（统一用 uint64 避免符号歧义）
 }
 
 type Compare_Value struct {
-	Value []byte `protobuf:"bytes,5,opt,name=value,proto3,oneof"` // value
+	Value []byte `protobuf:"bytes,5,opt,name=value,proto3,oneof"` // 用于 VALUE 比较
 }
 
 func (*Compare_Version) isCompare_TargetValue() {}
@@ -1338,7 +1347,7 @@ func (*ResponseOp_Range) isResponseOp_Response() {}
 
 type TxnRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Compares      []*Compare             `protobuf:"bytes,1,rep,name=compares,proto3" json:"compares,omitempty"`
+	Compares      []*Compare             `protobuf:"bytes,1,rep,name=compares,proto3" json:"compares,omitempty"` // 所有条件均满足则走 success 分支，否则走 failure 分支
 	Success       []*RequestOp           `protobuf:"bytes,2,rep,name=success,proto3" json:"success,omitempty"`
 	Failure       []*RequestOp           `protobuf:"bytes,3,rep,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1399,7 +1408,7 @@ func (x *TxnRequest) GetFailure() []*RequestOp {
 type TxnResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	Succeeded     bool                   `protobuf:"varint,2,opt,name=succeeded,proto3" json:"succeeded,omitempty"` // 条件是否满足
+	Succeeded     bool                   `protobuf:"varint,2,opt,name=succeeded,proto3" json:"succeeded,omitempty"` // true = compares 全部满足，执行了 success 分支
 	Responses     []*ResponseOp          `protobuf:"bytes,3,rep,name=responses,proto3" json:"responses,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1520,7 +1529,7 @@ type WatchRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Key            []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Prefix         bool                   `protobuf:"varint,2,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	StartRevision  int64                  `protobuf:"varint,3,opt,name=start_revision,json=startRevision,proto3" json:"start_revision,omitempty"`
+	StartRevision  uint64                 `protobuf:"varint,3,opt,name=start_revision,json=startRevision,proto3" json:"start_revision,omitempty"` // 0 = 从当前 revision 开始
 	PrevKv         bool                   `protobuf:"varint,4,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"`
 	ProgressNotify bool                   `protobuf:"varint,5,opt,name=progress_notify,json=progressNotify,proto3" json:"progress_notify,omitempty"`
 	unknownFields  protoimpl.UnknownFields
@@ -1571,7 +1580,7 @@ func (x *WatchRequest) GetPrefix() bool {
 	return false
 }
 
-func (x *WatchRequest) GetStartRevision() int64 {
+func (x *WatchRequest) GetStartRevision() uint64 {
 	if x != nil {
 		return x.StartRevision
 	}
@@ -1598,7 +1607,8 @@ type WatchResponse struct {
 	WatchId         int64                  `protobuf:"varint,2,opt,name=watch_id,json=watchId,proto3" json:"watch_id,omitempty"`
 	Created         bool                   `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
 	Canceled        bool                   `protobuf:"varint,4,opt,name=canceled,proto3" json:"canceled,omitempty"`
-	CompactRevision int64                  `protobuf:"varint,5,opt,name=compact_revision,json=compactRevision,proto3" json:"compact_revision,omitempty"`
+	CompactRevision uint64                 `protobuf:"varint,5,opt,name=compact_revision,json=compactRevision,proto3" json:"compact_revision,omitempty"` // 已 compact 的最大 revision（客户端 start_revision 过旧时填充）
+	Events          []*Event               `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1661,11 +1671,18 @@ func (x *WatchResponse) GetCanceled() bool {
 	return false
 }
 
-func (x *WatchResponse) GetCompactRevision() int64 {
+func (x *WatchResponse) GetCompactRevision() uint64 {
 	if x != nil {
 		return x.CompactRevision
 	}
 	return 0
+}
+
+func (x *WatchResponse) GetEvents() []*Event {
+	if x != nil {
+		return x.Events
+	}
+	return nil
 }
 
 type LeaseGrantCommand struct {
@@ -1766,8 +1783,8 @@ func (x *LeaseRevokeCommand) GetId() int64 {
 
 type LeaseGrantRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ttl           int64                  `protobuf:"varint,1,opt,name=ttl,proto3" json:"ttl,omitempty"` // TTL
-	Id            int64                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`   // 请求的 LeaseID, 0 = 自动分配
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`   // 请求的 LeaseID, 0 = 自动分配
+	Ttl           int64                  `protobuf:"varint,2,opt,name=ttl,proto3" json:"ttl,omitempty"` // TTL
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1802,16 +1819,16 @@ func (*LeaseGrantRequest) Descriptor() ([]byte, []int) {
 	return file_kv_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *LeaseGrantRequest) GetTtl() int64 {
+func (x *LeaseGrantRequest) GetId() int64 {
 	if x != nil {
-		return x.Ttl
+		return x.Id
 	}
 	return 0
 }
 
-func (x *LeaseGrantRequest) GetId() int64 {
+func (x *LeaseGrantRequest) GetTtl() int64 {
 	if x != nil {
-		return x.Id
+		return x.Ttl
 	}
 	return 0
 }
@@ -1821,7 +1838,6 @@ type LeaseGrantResponse struct {
 	Header        *ResponseHeader        `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
 	Id            int64                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`   // 分配的 LeaseID
 	Ttl           int64                  `protobuf:"varint,3,opt,name=ttl,proto3" json:"ttl,omitempty"` // 实际 TTL
-	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1875,13 +1891,6 @@ func (x *LeaseGrantResponse) GetTtl() int64 {
 		return x.Ttl
 	}
 	return 0
-}
-
-func (x *LeaseGrantResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
 }
 
 type LeaseRevokeRequest struct {
@@ -2188,28 +2197,28 @@ const file_kv_proto_rawDesc = "" +
 	"\fWatchRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x16\n" +
 	"\x06prefix\x18\x02 \x01(\bR\x06prefix\x12%\n" +
-	"\x0estart_revision\x18\x03 \x01(\x03R\rstartRevision\x12\x17\n" +
+	"\x0estart_revision\x18\x03 \x01(\x04R\rstartRevision\x12\x17\n" +
 	"\aprev_kv\x18\x04 \x01(\bR\x06prevKv\x12'\n" +
-	"\x0fprogress_notify\x18\x05 \x01(\bR\x0eprogressNotify\"\xb9\x01\n" +
+	"\x0fprogress_notify\x18\x05 \x01(\bR\x0eprogressNotify\"\xde\x01\n" +
 	"\rWatchResponse\x12,\n" +
 	"\x06header\x18\x01 \x01(\v2\x14.kvpb.ResponseHeaderR\x06header\x12\x19\n" +
 	"\bwatch_id\x18\x02 \x01(\x03R\awatchId\x12\x18\n" +
 	"\acreated\x18\x03 \x01(\bR\acreated\x12\x1a\n" +
 	"\bcanceled\x18\x04 \x01(\bR\bcanceled\x12)\n" +
-	"\x10compact_revision\x18\x05 \x01(\x03R\x0fcompactRevision\"5\n" +
+	"\x10compact_revision\x18\x05 \x01(\x04R\x0fcompactRevision\x12#\n" +
+	"\x06events\x18\x06 \x03(\v2\v.kvpb.EventR\x06events\"5\n" +
 	"\x11LeaseGrantCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x10\n" +
 	"\x03ttl\x18\x02 \x01(\x03R\x03ttl\"$\n" +
 	"\x12LeaseRevokeCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"5\n" +
-	"\x11LeaseGrantRequest\x12\x10\n" +
-	"\x03ttl\x18\x01 \x01(\x03R\x03ttl\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x03R\x02id\"z\n" +
+	"\x11LeaseGrantRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x10\n" +
+	"\x03ttl\x18\x02 \x01(\x03R\x03ttl\"d\n" +
 	"\x12LeaseGrantResponse\x12,\n" +
 	"\x06header\x18\x01 \x01(\v2\x14.kvpb.ResponseHeaderR\x06header\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\x03R\x02id\x12\x10\n" +
-	"\x03ttl\x18\x03 \x01(\x03R\x03ttl\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"$\n" +
+	"\x03ttl\x18\x03 \x01(\x03R\x03ttl\"$\n" +
 	"\x12LeaseRevokeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"C\n" +
 	"\x13LeaseRevokeResponse\x12,\n" +
@@ -2307,14 +2316,15 @@ var file_kv_proto_depIdxs = []int32{
 	4,  // 30: kvpb.Event.kv:type_name -> kvpb.KeyValue
 	4,  // 31: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
 	3,  // 32: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 33: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 34: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 35: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
-	36, // [36:36] is the sub-list for method output_type
-	36, // [36:36] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	20, // 33: kvpb.WatchResponse.events:type_name -> kvpb.Event
+	3,  // 34: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 35: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 36: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_kv_proto_init() }
