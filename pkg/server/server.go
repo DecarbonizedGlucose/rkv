@@ -7,21 +7,26 @@ import (
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/kv"
+	"github.com/DecarbonizedGlucose/rkv/pkg/lease"
 	"github.com/DecarbonizedGlucose/rkv/pkg/option"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raft"
 	tr "github.com/DecarbonizedGlucose/rkv/pkg/raft_transport"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
+	"github.com/DecarbonizedGlucose/rkv/pkg/watch"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
+// Server 聚合 KV / Watch / Lease 三个 gRPC 服务，统一管理资源生命周期。
 type Server struct {
 	ctx context.Context
 
-	kvServer   *kv.KVServer
-	grpcServer *grpc.Server
+	kvServer    *kv.KVServer
+	watchServer *watch.WatchServer
+	leaseServer *lease.LeaseServer
+	grpcServer  *grpc.Server
 
 	// 资源释放
 	node      *raftstore.Node
@@ -86,8 +91,18 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	}
 	s.node = node
 
-	kvServer := kv.NewKVServer(node, kvStor, revMgr, o.NodeID)
-	s.kvServer = kvServer
+	s.kvServer = kv.NewKVServer(node, kvStor, revMgr, o.NodeID)
+
+	wm := watch.NewWatchManager(revMgr)
+	s.watchServer = watch.NewWatchServer(wm)
+
+	tw := lease.NewTimeWheel(lease.DefaultTimeWheelConfig())
+	lm := lease.NewLeaseManager(tw, node)
+	s.leaseServer = lease.NewLeaseServer(lm, node, o.NodeID)
+
+	sm.SetWatchPublisher(wm)
+	sm.SetLeaseHandler(lm)
+
 	return s, nil
 }
 
@@ -100,6 +115,8 @@ func (s *Server) Serve() error {
 	}
 	s.grpcServer = grpc.NewServer()
 	rpcpb.RegisterKVServiceServer(s.grpcServer, s.kvServer)
+	rpcpb.RegisterWatchServiceServer(s.grpcServer, s.watchServer)
+	rpcpb.RegisterLeaseServiceServer(s.grpcServer, s.leaseServer)
 	reflection.Register(s.grpcServer) // 适配 grpcurl
 
 	errCh := make(chan error, 1)
