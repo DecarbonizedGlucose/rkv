@@ -13,6 +13,27 @@ import (
 
 var ErrInvalidCommand = errors.New("invalid command")
 
+// Publisher 是 StateMachine 发布事件的接口，供 WatchManager 实现。
+type Publisher interface {
+	// Publish 在 applyCommand 成功应用后调用，发布事件通知 WatchManager。
+	Publish(key []byte, kv, prevKV *kvpb.KeyValue, eventType kvpb.EventType)
+}
+
+// LeaseHandler 是 StateMachine 与 LeaseManager 之间的接口。
+type LeaseHandler interface {
+	// Attach 在 applyPut 持有 lease 时调用，将 key 关联到租约。
+	Attach(leaseID int64, key []byte)
+
+	// Detach 在 applyDelete 或覆盖写入时调用，解除 key 与租约的关联。
+	Detach(leaseID int64, key []byte)
+
+	// Grant 在 apply LeaseGrant 时调用，激活租约并启动定时器。
+	Grant(leaseID int64, ttl int64)
+
+	// Revoke 在 apply LeaseRevoke 时调用，移除租约并停止定时器。
+	Revoke(leaseID int64)
+}
+
 // StateMachine 是 Raft 驱动的 KV 状态机，负责应用
 // 已提交的日志条目并维护 KV 状态。
 //
@@ -22,6 +43,8 @@ var ErrInvalidCommand = errors.New("invalid command")
 type StateMachine struct {
 	stor   storage.Storage
 	revMgr *RevisionManager
+	wm     Publisher
+	lm     LeaseHandler
 }
 
 func NewStateMachine(stor storage.Storage, revMgr *RevisionManager) *StateMachine {
@@ -259,4 +282,12 @@ func (sm *StateMachine) ApplySnapshot(snap *raftpb.Snapshot) error {
 	}
 	sm.revMgr.Set(sm.stor.MaxRevision()) // 快照恢复后, revision 可能不为 0，需更新 RevisionManager。
 	return nil
+}
+
+func (sm *StateMachine) SetWatchPublisher(watchp Publisher) {
+	sm.wm = watchp
+}
+
+func (sm *StateMachine) SetLeaseHandler(lm LeaseHandler) {
+	sm.lm = lm
 }
