@@ -44,9 +44,11 @@ message Command {
 // LeaseGrant/LeaseRevoke 由 applier 直接处理，无需序列化回 proposer，故不在此列。
 message Result {
     oneof res {
-        PutResponse    put    = 1;
-        DeleteResponse delete = 2;
-        TxnResponse    txn    = 3;
+        PutResponse         put          = 1;
+        DeleteResponse      delete       = 2;
+        TxnResponse         txn          = 3;
+        LeaseGrantResponse  lease_grant  = 4;
+        LeaseRevokeResponse lease_revoke = 5;
     }
 }
 

@@ -461,6 +461,8 @@ type Result struct {
 	//	*Result_Put
 	//	*Result_Delete
 	//	*Result_Txn
+	//	*Result_LeaseGrant
+	//	*Result_LeaseRevoke
 	Res           isResult_Res `protobuf_oneof:"res"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -530,6 +532,24 @@ func (x *Result) GetTxn() *TxnResponse {
 	return nil
 }
 
+func (x *Result) GetLeaseGrant() *LeaseGrantResponse {
+	if x != nil {
+		if x, ok := x.Res.(*Result_LeaseGrant); ok {
+			return x.LeaseGrant
+		}
+	}
+	return nil
+}
+
+func (x *Result) GetLeaseRevoke() *LeaseRevokeResponse {
+	if x != nil {
+		if x, ok := x.Res.(*Result_LeaseRevoke); ok {
+			return x.LeaseRevoke
+		}
+	}
+	return nil
+}
+
 type isResult_Res interface {
 	isResult_Res()
 }
@@ -546,11 +566,23 @@ type Result_Txn struct {
 	Txn *TxnResponse `protobuf:"bytes,3,opt,name=txn,proto3,oneof"`
 }
 
+type Result_LeaseGrant struct {
+	LeaseGrant *LeaseGrantResponse `protobuf:"bytes,4,opt,name=lease_grant,json=leaseGrant,proto3,oneof"`
+}
+
+type Result_LeaseRevoke struct {
+	LeaseRevoke *LeaseRevokeResponse `protobuf:"bytes,5,opt,name=lease_revoke,json=leaseRevoke,proto3,oneof"`
+}
+
 func (*Result_Put) isResult_Res() {}
 
 func (*Result_Delete) isResult_Res() {}
 
 func (*Result_Txn) isResult_Res() {}
+
+func (*Result_LeaseGrant) isResult_Res() {}
+
+func (*Result_LeaseRevoke) isResult_Res() {}
 
 type GetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2108,11 +2140,14 @@ const file_kv_proto_rawDesc = "" +
 	"\vlease_grant\x18\x04 \x01(\v2\x17.kvpb.LeaseGrantCommandH\x00R\n" +
 	"leaseGrant\x12=\n" +
 	"\flease_revoke\x18\x05 \x01(\v2\x18.kvpb.LeaseRevokeCommandH\x00R\vleaseRevokeB\x04\n" +
-	"\x02op\"\x8d\x01\n" +
+	"\x02op\"\x8a\x02\n" +
 	"\x06Result\x12%\n" +
 	"\x03put\x18\x01 \x01(\v2\x11.kvpb.PutResponseH\x00R\x03put\x12.\n" +
 	"\x06delete\x18\x02 \x01(\v2\x14.kvpb.DeleteResponseH\x00R\x06delete\x12%\n" +
-	"\x03txn\x18\x03 \x01(\v2\x11.kvpb.TxnResponseH\x00R\x03txnB\x05\n" +
+	"\x03txn\x18\x03 \x01(\v2\x11.kvpb.TxnResponseH\x00R\x03txn\x12;\n" +
+	"\vlease_grant\x18\x04 \x01(\v2\x18.kvpb.LeaseGrantResponseH\x00R\n" +
+	"leaseGrant\x12>\n" +
+	"\flease_revoke\x18\x05 \x01(\v2\x19.kvpb.LeaseRevokeResponseH\x00R\vleaseRevokeB\x05\n" +
 	"\x03res\"\x1e\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
@@ -2291,40 +2326,42 @@ var file_kv_proto_depIdxs = []int32{
 	10, // 5: kvpb.Result.put:type_name -> kvpb.PutResponse
 	12, // 6: kvpb.Result.delete:type_name -> kvpb.DeleteResponse
 	19, // 7: kvpb.Result.txn:type_name -> kvpb.TxnResponse
-	3,  // 8: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 9: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
-	3,  // 10: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 11: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 12: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 13: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 14: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
-	4,  // 15: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
-	1,  // 16: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
-	2,  // 17: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
-	9,  // 18: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
-	11, // 19: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
-	13, // 20: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
-	10, // 21: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
-	12, // 22: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
-	14, // 23: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
-	15, // 24: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
-	16, // 25: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
-	16, // 26: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
-	3,  // 27: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
-	17, // 28: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
-	0,  // 29: kvpb.Event.type:type_name -> kvpb.EventType
-	4,  // 30: kvpb.Event.kv:type_name -> kvpb.KeyValue
-	4,  // 31: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
-	3,  // 32: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
-	20, // 33: kvpb.WatchResponse.events:type_name -> kvpb.Event
-	3,  // 34: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 35: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
-	3,  // 36: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
-	37, // [37:37] is the sub-list for method output_type
-	37, // [37:37] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	26, // 8: kvpb.Result.lease_grant:type_name -> kvpb.LeaseGrantResponse
+	28, // 9: kvpb.Result.lease_revoke:type_name -> kvpb.LeaseRevokeResponse
+	3,  // 10: kvpb.GetResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 11: kvpb.GetResponse.kv:type_name -> kvpb.KeyValue
+	3,  // 12: kvpb.PutResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 13: kvpb.PutResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 14: kvpb.DeleteResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 15: kvpb.DeleteResponse.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 16: kvpb.RangeResponse.header:type_name -> kvpb.ResponseHeader
+	4,  // 17: kvpb.RangeResponse.kvs:type_name -> kvpb.KeyValue
+	1,  // 18: kvpb.Compare.result:type_name -> kvpb.Compare.CompareResult
+	2,  // 19: kvpb.Compare.target:type_name -> kvpb.Compare.CompareTarget
+	9,  // 20: kvpb.RequestOp.put:type_name -> kvpb.PutRequest
+	11, // 21: kvpb.RequestOp.delete:type_name -> kvpb.DeleteRequest
+	13, // 22: kvpb.RequestOp.range:type_name -> kvpb.RangeRequest
+	10, // 23: kvpb.ResponseOp.put:type_name -> kvpb.PutResponse
+	12, // 24: kvpb.ResponseOp.delete:type_name -> kvpb.DeleteResponse
+	14, // 25: kvpb.ResponseOp.range:type_name -> kvpb.RangeResponse
+	15, // 26: kvpb.TxnRequest.compares:type_name -> kvpb.Compare
+	16, // 27: kvpb.TxnRequest.success:type_name -> kvpb.RequestOp
+	16, // 28: kvpb.TxnRequest.failure:type_name -> kvpb.RequestOp
+	3,  // 29: kvpb.TxnResponse.header:type_name -> kvpb.ResponseHeader
+	17, // 30: kvpb.TxnResponse.responses:type_name -> kvpb.ResponseOp
+	0,  // 31: kvpb.Event.type:type_name -> kvpb.EventType
+	4,  // 32: kvpb.Event.kv:type_name -> kvpb.KeyValue
+	4,  // 33: kvpb.Event.prev_kv:type_name -> kvpb.KeyValue
+	3,  // 34: kvpb.WatchResponse.header:type_name -> kvpb.ResponseHeader
+	20, // 35: kvpb.WatchResponse.events:type_name -> kvpb.Event
+	3,  // 36: kvpb.LeaseGrantResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 37: kvpb.LeaseRevokeResponse.header:type_name -> kvpb.ResponseHeader
+	3,  // 38: kvpb.LeaseKeepAliveResponse.header:type_name -> kvpb.ResponseHeader
+	39, // [39:39] is the sub-list for method output_type
+	39, // [39:39] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_kv_proto_init() }
@@ -2343,6 +2380,8 @@ func file_kv_proto_init() {
 		(*Result_Put)(nil),
 		(*Result_Delete)(nil),
 		(*Result_Txn)(nil),
+		(*Result_LeaseGrant)(nil),
+		(*Result_LeaseRevoke)(nil),
 	}
 	file_kv_proto_msgTypes[12].OneofWrappers = []any{
 		(*Compare_Version)(nil),
