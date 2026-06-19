@@ -4,18 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync/atomic"
-
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
-	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
-	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
-	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
+	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
+	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
 )
 
 type KVServer struct {
@@ -140,11 +139,10 @@ func (s *KVServer) Txn(ctx context.Context, req *kvpb.TxnRequest) (*kvpb.TxnResp
 // ==================== Internal Helper ====================
 
 func (s *KVServer) isLeader(ctx context.Context) bool {
-	lid := s.node.LeaderID()
-	if lid == s.nodeID {
+	if s.node.IsLeader() {
 		return true
 	}
-	grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", lid)))
+	grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
 	return false
 }
 
