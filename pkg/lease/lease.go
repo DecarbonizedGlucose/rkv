@@ -23,12 +23,13 @@ type Lease struct {
 // GrantLease/RevokeLease 通过 Raft 提案执行；KeepAlive 是本地操作；
 // 过期由 TimeWheel 触发，通过 Raft 提案删除关联 key。
 type LeaseManager struct {
-	mu        sync.Mutex
-	leases    map[int64]*Lease
-	tw        *TimeWheel
-	node      *raftstore.Node
-	nextID    atomic.Int64
-	proposeFn func(*kvpb.Command) error
+	mu         sync.Mutex
+	leases     map[int64]*Lease
+	tw         *TimeWheel
+	node       *raftstore.Node
+	nextID     atomic.Int64
+	proposeFn  func(*kvpb.Command) error
+	isLeaderFn func() bool // 注入 Leader 检查，默认取 node.IsLeader；测试可替换
 }
 
 func NewLeaseManager(tw *TimeWheel, node *raftstore.Node, proposeFn func(*kvpb.Command) error) *LeaseManager {
@@ -37,6 +38,12 @@ func NewLeaseManager(tw *TimeWheel, node *raftstore.Node, proposeFn func(*kvpb.C
 		tw:        tw,
 		node:      node,
 		proposeFn: proposeFn,
+	}
+	l.isLeaderFn = func() bool {
+		if l.node == nil {
+			return false
+		}
+		return l.node.IsLeader()
 	}
 	l.tw.Start()
 	return l
@@ -75,10 +82,14 @@ func (lm *LeaseManager) LeaseRevoke(id int64) error {
 // KeepAlive 续约租约，重置 TTL 和过期时间。返回新的 TTL。本函数是 gRPC handler。
 func (lm *LeaseManager) KeepAlive(id int64) (int64, error) {
 	// 这里不经过 Raft，所以要判断是否易主
-	if !lm.node.IsLeader() {
+	if !lm.isLeaderFn() {
 		return 0, ErrNotLeader
 	}
+	return lm.renew(id)
+}
 
+// renew 取消旧定时器，按原 TTL 重新调度。不检查 Leader。
+func (lm *LeaseManager) renew(id int64) (int64, error) {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -86,7 +97,6 @@ func (lm *LeaseManager) KeepAlive(id int64) (int64, error) {
 	if !ok {
 		return 0, ErrLeaseNotFound
 	}
-	// 重置 TTL 和过期时间，更新 TimeWheel 任务。
 	lm.tw.Cancel(lease.timerID)
 	lease.timerID = lm.tw.Add(time.Duration(lease.TTL)*time.Second, func() {
 		lm.onExpire(id)
