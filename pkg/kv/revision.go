@@ -39,3 +39,8 @@ func NewRevisionManager(initial uint64) *RevisionManager {
 	r.revision.Store(initial)
 	return r
 }
+
+// RevisionPeeker 是一个用于获取当前 Revision 的接口。只有读权限。
+type RevisionPeeker interface {
+	Peek() uint64
+}

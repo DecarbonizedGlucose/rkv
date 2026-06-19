@@ -64,6 +64,7 @@ type Node struct {
 
 	// 从 Ready.SoftState 中提取，通过 LeaderID() 对外暴露。
 	leaderID atomic.Uint64
+	myID     uint64 // 本节点 ID，仅引用
 
 	raftTerm atomic.Uint64
 
@@ -136,6 +137,7 @@ func NewNode(cfg *Config) (*Node, error) {
 		sm:            cfg.StateMachine,
 		propCh:        make(chan *proposal, 256),
 		pending:       make(map[uint64]*proposal),
+		myID:          cfg.RaftConfig.ID,
 		snapshotCount: snapCount,
 		tickInterval:  tickInterval,
 		ticker:        time.NewTicker(tickInterval),
@@ -181,6 +183,10 @@ func (n *Node) Propose(data []byte, proposalID uint64) ([]byte, error) {
 	case <-n.stopCh:
 		return nil, ErrStopped
 	}
+}
+
+func (n *Node) IsLeader() bool {
+	return n.LeaderID() == n.myID
 }
 
 func (n *Node) LeaderID() uint64 {
