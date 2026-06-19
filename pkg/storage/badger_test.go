@@ -39,7 +39,7 @@ func TestBadgerPutGet(t *testing.T) {
 
 	rev := revCounter{}
 
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
 	require.NoError(t, err)
 
 	ikv, err := s.Get([]byte("k1"), rev.next())
@@ -65,11 +65,11 @@ func TestBadgerPutOverride(t *testing.T) {
 	rev := revCounter{}
 
 	// 首次写
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
 	require.NoError(t, err)
 
 	// 覆盖写
-	_, err = s.Put([]byte("k1"), []byte("v2"), false, rev.next(), 0)
+	_, err = s.Put([]byte("k1"), []byte("v2"), rev.next(), 0)
 	require.NoError(t, err)
 
 	ikv, err := s.Get([]byte("k1"), rev.next())
@@ -90,7 +90,7 @@ func TestBadgerPutGetMultipleKeys(t *testing.T) {
 	keys := [][]byte{[]byte("a"), []byte("b"), []byte("c")}
 
 	for _, k := range keys {
-		_, err := s.Put(k, []byte("val_"+string(k)), false, rev.next(), 0)
+		_, err := s.Put(k, []byte("val_"+string(k)), rev.next(), 0)
 		require.NoError(t, err)
 	}
 
@@ -115,12 +115,12 @@ func TestBadgerPutPrevKV(t *testing.T) {
 
 	// 首次写
 	rev1 := rev.next()
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev1, 0)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev1, 0)
 	require.NoError(t, err)
 
 	// 覆盖写，取 prev_kv
 	rev2 := rev.next()
-	prevKV, err := s.Put([]byte("k1"), []byte("v2"), true, rev2, 0)
+	prevKV, err := s.Put([]byte("k1"), []byte("v2"), rev2, 0)
 	require.NoError(t, err)
 	require.NotNil(t, prevKV)
 
@@ -137,7 +137,7 @@ func TestBadgerPutPrevKVNewKey(t *testing.T) {
 	rev := revCounter{}
 
 	// 新 key，prev_kv=true——ikv 应为 nil
-	ikv, err := s.Put([]byte("new_key"), []byte("v"), true, rev.next(), 0)
+	ikv, err := s.Put([]byte("new_key"), []byte("v"), rev.next(), 0)
 	require.NoError(t, err)
 	assert.Nil(t, ikv)
 }
@@ -149,11 +149,11 @@ func TestBadgerDeletePrevKV(t *testing.T) {
 	rev := revCounter{}
 
 	rev1 := rev.next()
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev1, 0)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev1, 0)
 	require.NoError(t, err)
 
 	rev2 := rev.next()
-	prevKV, err := s.Delete([]byte("k1"), true, rev2)
+	prevKV, err := s.Delete([]byte("k1"), rev2)
 	require.NoError(t, err)
 	require.NotNil(t, prevKV)
 
@@ -177,10 +177,10 @@ func TestBadgerDelete(t *testing.T) {
 
 	rev := revCounter{}
 
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
 	require.NoError(t, err)
 
-	_, err = s.Delete([]byte("k1"), false, rev.next())
+	_, err = s.Delete([]byte("k1"), rev.next())
 	require.NoError(t, err)
 
 	_, err = s.Get([]byte("k1"), rev.next())
@@ -191,7 +191,7 @@ func TestBadgerDeleteKeyNotFound(t *testing.T) {
 	s, cleanup := testutil.NewTestStorage(t)
 	defer cleanup()
 
-	_, err := s.Delete([]byte("no_such_key"), false, 1)
+	_, err := s.Delete([]byte("no_such_key"), 1)
 	assert.ErrorIs(t, err, storage.ErrKeyNotFound)
 }
 
@@ -205,7 +205,7 @@ func TestBadgerLeaseID(t *testing.T) {
 
 	rev := revCounter{}
 
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 42)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev.next(), 42)
 	require.NoError(t, err)
 
 	ikv, err := s.Get([]byte("k1"), rev.next())
@@ -221,11 +221,11 @@ func TestBadgerLeaseOverride(t *testing.T) {
 	rev := revCounter{}
 
 	// 首次写，指定 lease=1
-	_, err := s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 1)
+	_, err := s.Put([]byte("k1"), []byte("v1"), rev.next(), 1)
 	require.NoError(t, err)
 
 	// 覆盖写，不指定 lease——保留旧值
-	_, err = s.Put([]byte("k1"), []byte("v2"), false, rev.next(), 0)
+	_, err = s.Put([]byte("k1"), []byte("v2"), rev.next(), 0)
 	require.NoError(t, err)
 
 	ikv, err := s.Get([]byte("k1"), rev.next())
@@ -243,11 +243,11 @@ func TestBadgerRangeFullScan(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, err := s.Put([]byte("a"), []byte("va"), false, rev.next(), 0)
+	_, err := s.Put([]byte("a"), []byte("va"), rev.next(), 0)
 	require.NoError(t, err)
-	_, err = s.Put([]byte("b"), []byte("vb"), false, rev.next(), 0)
+	_, err = s.Put([]byte("b"), []byte("vb"), rev.next(), 0)
 	require.NoError(t, err)
-	_, err = s.Put([]byte("c"), []byte("vc"), false, rev.next(), 0)
+	_, err = s.Put([]byte("c"), []byte("vc"), rev.next(), 0)
 	require.NoError(t, err)
 
 	ikvs, more, err := s.Range([]byte("a"), nil, 0, nil, rev.next())
@@ -261,9 +261,9 @@ func TestBadgerRangeWithEnd(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("a"), []byte("va"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("b"), []byte("vb"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("c"), []byte("vc"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("a"), []byte("va"), rev.next(), 0)
+	_, _ = s.Put([]byte("b"), []byte("vb"), rev.next(), 0)
+	_, _ = s.Put([]byte("c"), []byte("vc"), rev.next(), 0)
 
 	// [a, c) => 只返 a 和 b
 	ikvs, more, err := s.Range([]byte("a"), []byte("c"), 0, nil, rev.next())
@@ -283,8 +283,8 @@ func TestBadgerRangeStartNotExist(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("b"), []byte("vb"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("c"), []byte("vc"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("b"), []byte("vb"), rev.next(), 0)
+	_, _ = s.Put([]byte("c"), []byte("vc"), rev.next(), 0)
 
 	// start 不存在，Seek 到下一个
 	ikvs, more, err := s.Range([]byte("a"), nil, 0, nil, rev.next())
@@ -298,9 +298,9 @@ func TestBadgerRangeLimit(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k2"), []byte("v2"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k3"), []byte("v3"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
+	_, _ = s.Put([]byte("k2"), []byte("v2"), rev.next(), 0)
+	_, _ = s.Put([]byte("k3"), []byte("v3"), rev.next(), 0)
 
 	ikvs, more, err := s.Range([]byte("k"), nil, 2, nil, rev.next())
 	require.NoError(t, err)
@@ -313,8 +313,8 @@ func TestBadgerRangeLimitExact(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k2"), []byte("v2"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
+	_, _ = s.Put([]byte("k2"), []byte("v2"), rev.next(), 0)
 
 	// limit 刚好等于总量
 	ikvs, more, err := s.Range([]byte("k"), nil, 2, nil, rev.next())
@@ -340,9 +340,9 @@ func TestBadgerRangeFilter(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("a"), []byte("va"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("ab"), []byte("vab"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("b"), []byte("vb"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("a"), []byte("va"), rev.next(), 0)
+	_, _ = s.Put([]byte("ab"), []byte("vab"), rev.next(), 0)
+	_, _ = s.Put([]byte("b"), []byte("vb"), rev.next(), 0)
 
 	// 过滤掉 b
 	ikvs, more, err := s.Range([]byte("a"), nil, 0,
@@ -361,10 +361,10 @@ func TestBadgerRangeEndWithLimit(t *testing.T) {
 	defer cleanup()
 
 	rev := revCounter{}
-	_, _ = s.Put([]byte("k1"), []byte("v1"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k2"), []byte("v2"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k3"), []byte("v3"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("k4"), []byte("v4"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("k1"), []byte("v1"), rev.next(), 0)
+	_, _ = s.Put([]byte("k2"), []byte("v2"), rev.next(), 0)
+	_, _ = s.Put([]byte("k3"), []byte("v3"), rev.next(), 0)
+	_, _ = s.Put([]byte("k4"), []byte("v4"), rev.next(), 0)
 
 	// [k, k3) 内 limit=2，且区间内实际只有 k1,k2
 	ikvs, more, err := s.Range([]byte("k"), []byte("k3"), 2, nil, rev.next())
@@ -379,9 +379,9 @@ func TestBadgerRangeKeyOrder(t *testing.T) {
 
 	rev := revCounter{}
 	// 乱序写入
-	_, _ = s.Put([]byte("z"), []byte("vz"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("a"), []byte("va"), false, rev.next(), 0)
-	_, _ = s.Put([]byte("m"), []byte("vm"), false, rev.next(), 0)
+	_, _ = s.Put([]byte("z"), []byte("vz"), rev.next(), 0)
+	_, _ = s.Put([]byte("a"), []byte("va"), rev.next(), 0)
+	_, _ = s.Put([]byte("m"), []byte("vm"), rev.next(), 0)
 
 	ikvs, more, err := s.Range([]byte("a"), nil, 0, nil, rev.next())
 	require.NoError(t, err)

@@ -105,19 +105,19 @@ func (sm *StateMachine) applyCommand(cmd *kvpb.Command, rev uint64) (*kvpb.Resul
 }
 
 func (sm *StateMachine) applyPut(req *kvpb.PutRequest, rev uint64) (*kvpb.Result, error) {
-	prevKV, err := sm.stor.Put(req.Key, req.Value, req.PrevKv > 0, rev, req.Lease)
+	prevKV, err := sm.stor.Put(req.Key, req.Value, rev, req.Lease)
 	res := &kvpb.PutResponse{}
 	if err != nil {
 		return nil, err
 	}
-	if prevKV != nil {
+	if req.PrevKv > 0 && prevKV != nil {
 		res.PrevKv = prevKV.ToProto()
 	}
 	return &kvpb.Result{Res: &kvpb.Result_Put{Put: res}}, nil
 }
 
 func (sm *StateMachine) applyDelete(req *kvpb.DeleteRequest, rev uint64) (*kvpb.Result, error) {
-	prevKV, err := sm.stor.Delete(req.Key, req.PrevKv > 0, rev)
+	prevKV, err := sm.stor.Delete(req.Key, rev)
 	res := &kvpb.DeleteResponse{}
 	if err == storage.ErrKeyNotFound {
 		res.Deleted = 0
@@ -126,7 +126,7 @@ func (sm *StateMachine) applyDelete(req *kvpb.DeleteRequest, rev uint64) (*kvpb.
 	} else {
 		res.Deleted = 1
 	}
-	if prevKV != nil {
+	if req.PrevKv > 0 && prevKV != nil {
 		res.PrevKv = prevKV.ToProto()
 	}
 	return &kvpb.Result{Res: &kvpb.Result_Delete{Delete: res}}, nil
@@ -150,11 +150,11 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 
 	responses := make([]*kvpb.ResponseOp, 0, len(ops))
 	for _, op := range ops {
-		resp, err := sm.applyRequestOpTxn(txn, op)
+		resp, prevKV, err := sm.applyRequestOpTxn(txn, op)
 		if err != nil {
 			return nil, err
 		}
-		responses = append(responses, resp)
+		results = append(results, &txnResult{op: op, resp: resp, prevKV: prevKV})
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -223,17 +223,17 @@ func (sm *StateMachine) evalCompareTxn(txn storage.Transaction, cmp *kvpb.Compar
 func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.RequestOp) (*kvpb.ResponseOp, error) {
 	switch {
 	case op.GetPut() != nil:
-		prevKV, err := txn.Put(op.GetPut().Key, op.GetPut().Value, op.GetPut().PrevKv > 0, op.GetPut().Lease)
+		prevKV, err := txn.Put(op.GetPut().Key, op.GetPut().Value, op.GetPut().Lease)
 		if err != nil {
 			return nil, err
 		}
 		res := &kvpb.PutResponse{}
-		if prevKV != nil {
+		if op.GetPut().PrevKv > 0 && prevKV != nil {
 			res.PrevKv = prevKV.ToProto()
 		}
 		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Put{Put: res}}, nil
 	case op.GetDelete() != nil:
-		prevKV, err := txn.Delete(op.GetDelete().Key, op.GetDelete().PrevKv > 0)
+		prevKV, err := txn.Delete(op.GetDelete().Key)
 		res := &kvpb.DeleteResponse{}
 		if err == storage.ErrKeyNotFound {
 			res.Deleted = 0
@@ -241,7 +241,7 @@ func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.Requ
 			return nil, err
 		} else {
 			res.Deleted = 1
-			if prevKV != nil {
+			if op.GetDelete().PrevKv > 0 && prevKV != nil {
 				res.PrevKv = prevKV.ToProto()
 			}
 		}

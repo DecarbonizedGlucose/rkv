@@ -29,13 +29,13 @@ func (b *BadgerStorage) Get(key []byte, rev uint64) (ikv *util.InternalKV, err e
 }
 
 // Put 写入或覆盖 key，以 rev 作为 Badger 版本号提交。
-// prev_kv 为 true 时返回修改前的完整 IKVs，若 key 不存在则 ikv 为 nil。
-func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease int64) (ikv *util.InternalKV, err error) {
+// 返回修改前的完整 IKVs，若 key 不存在则 ikv 为 nil。
+func (b *BadgerStorage) Put(key, value []byte, rev uint64, lease int64) (ikv *util.InternalKV, err error) {
 	readTs := b.db.MaxVersion()
 	txn := b.db.NewTransactionAt(readTs, true)
 	defer txn.Discard()
 
-	ikv, err = bPut(txn, key, value, prev_kv, rev, lease)
+	ikv, err = bPut(txn, key, value, rev, lease)
 	if err != nil {
 		return nil, err
 	}
@@ -47,13 +47,13 @@ func (b *BadgerStorage) Put(key, value []byte, prev_kv bool, rev uint64, lease i
 }
 
 // Delete 删除 key，以 rev 作为 Badger 版本号提交。
-// prev_kv 为 true 时返回删除前的完整 IKVs，若 key 不存在则返回 ErrKeyNotFound。
-func (b *BadgerStorage) Delete(key []byte, prev_kv bool, rev uint64) (ikv *util.InternalKV, err error) {
+// 返回删除前的完整 IKVs，若 key 不存在则返回 ErrKeyNotFound。
+func (b *BadgerStorage) Delete(key []byte, rev uint64) (ikv *util.InternalKV, err error) {
 	readTs := b.db.MaxVersion()
 	txn := b.db.NewTransactionAt(readTs, true)
 	defer txn.Discard()
 
-	ikv, err = bDel(txn, key, prev_kv, rev)
+	ikv, err = bDel(txn, key, rev)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (b *BadgerStorage) Restore(data []byte) error {
 		return pairs[i].MRevision < pairs[j].MRevision
 	})
 	for _, ikv := range pairs {
-		if _, err := b.Put(ikv.Key, ikv.Value, false, ikv.MRevision, ikv.LeaseID); err != nil {
+		if _, err := b.Put(ikv.Key, ikv.Value, ikv.MRevision, ikv.LeaseID); err != nil {
 			return err
 		}
 	}
@@ -180,12 +180,12 @@ func (bt *BadgerTransaction) Get(key []byte) (ikv *util.InternalKV, err error) {
 	return bGet(bt.txn, key, bt.rev)
 }
 
-func (bt *BadgerTransaction) Put(key, value []byte, prev_kv bool, lease int64) (ikv *util.InternalKV, err error) {
-	return bPut(bt.txn, key, value, prev_kv, bt.rev, lease)
+func (bt *BadgerTransaction) Put(key, value []byte, lease int64) (ikv *util.InternalKV, err error) {
+	return bPut(bt.txn, key, value, bt.rev, lease)
 }
 
-func (bt *BadgerTransaction) Delete(key []byte, prev_kv bool) (ikv *util.InternalKV, err error) {
-	return bDel(bt.txn, key, prev_kv, bt.rev)
+func (bt *BadgerTransaction) Delete(key []byte) (ikv *util.InternalKV, err error) {
+	return bDel(bt.txn, key, bt.rev)
 }
 
 func (bt *BadgerTransaction) Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool) (ikvs []*util.InternalKV, more bool, err error) {
@@ -222,7 +222,7 @@ func bGet(txn *badger.Txn, key []byte, rev uint64) (ikv *util.InternalKV, err er
 	return ikv, nil
 }
 
-func bPut(txn *badger.Txn, key, value []byte, prev_kv bool, rev uint64, lease int64) (ikv *util.InternalKV, err error) {
+func bPut(txn *badger.Txn, key, value []byte, rev uint64, lease int64) (ikv *util.InternalKV, err error) {
 	var iv, newIV *util.InternalValue
 	var mrev uint64
 
@@ -259,7 +259,7 @@ func bPut(txn *badger.Txn, key, value []byte, prev_kv bool, rev uint64, lease in
 	if err := txn.Set(key, newv); err != nil {
 		return nil, err
 	}
-	if prev_kv && iv != nil {
+	if iv != nil {
 		ikv, err = util.MakeInternalKV(iv, nil, key, rev, mrev)
 		if err != nil {
 			return nil, err
@@ -268,7 +268,7 @@ func bPut(txn *badger.Txn, key, value []byte, prev_kv bool, rev uint64, lease in
 	return ikv, nil
 }
 
-func bDel(txn *badger.Txn, key []byte, prev_kv bool, rev uint64) (ikv *util.InternalKV, err error) {
+func bDel(txn *badger.Txn, key []byte, rev uint64) (ikv *util.InternalKV, err error) {
 	item, err := txn.Get(key)
 	if err == badger.ErrKeyNotFound {
 		return nil, ErrKeyNotFound
@@ -279,15 +279,13 @@ func bDel(txn *badger.Txn, key []byte, prev_kv bool, rev uint64) (ikv *util.Inte
 
 	mrev := item.Version()
 
-	if prev_kv {
-		cv, err := item.ValueCopy(nil)
-		if err != nil {
-			return nil, err
-		}
-		ikv, err = util.MakeInternalKV(nil, cv, key, rev, mrev)
-		if err != nil {
-			return nil, err
-		}
+	cv, err := item.ValueCopy(nil)
+	if err != nil {
+		return nil, err
+	}
+	ikv, err = util.MakeInternalKV(nil, cv, key, rev, mrev)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := txn.Delete(key); err != nil {
