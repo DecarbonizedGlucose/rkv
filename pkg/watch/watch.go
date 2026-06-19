@@ -87,3 +87,10 @@ func match(w *Watcher, key []byte) bool {
 	}
 	return bytes.Equal(key, w.Key)
 }
+
+func MatchKey(watchKey []byte, prefix bool, key []byte) bool {
+	if prefix {
+		return bytes.HasPrefix(key, watchKey)
+	}
+	return bytes.Equal(watchKey, key)
+}

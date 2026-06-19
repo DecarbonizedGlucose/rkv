@@ -121,7 +121,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	s.kvServer = kv.NewKVServer(node, kvStor, s.revMgr, o.NodeID, s.pidMgr)
 
 	wm := watch.NewWatchManager(s.revMgr)
-	s.watchServer = watch.NewWatchServer(wm, node, o.NodeID, s.revMgr)
+	s.watchServer = watch.NewWatchServer(wm, node, o.NodeID, s.revMgr, kvStor)
 
 	s.tw = lease.NewTimeWheel(lease.DefaultTimeWheelConfig())
 	lm := lease.NewLeaseManager(s.tw, node, proposeLease)
