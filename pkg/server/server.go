@@ -5,6 +5,11 @@ import (
 	"log"
 	"net"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/kv"
 	"github.com/DecarbonizedGlucose/rkv/pkg/lease"
@@ -14,9 +19,6 @@ import (
 	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
 	"github.com/DecarbonizedGlucose/rkv/pkg/watch"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 // Server 聚合 KV / Watch / Lease 三个 gRPC 服务，统一管理资源生命周期。
@@ -31,8 +33,11 @@ type Server struct {
 	// 资源释放
 	node      *raftstore.Node
 	transport tr.Transport
+	tw        *lease.TimeWheel
 	raftStor  raftstore.Storage
 	kvStor    storage.Storage
+
+	revMgr *kv.RevisionManager
 	pidMgr *kv.ProposalIDManager
 
 	o *option.Option
@@ -61,7 +66,10 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	}
 	s.kvStor = kvStor
 
+	s.revMgr = kv.NewRevisionManager(maxRev)
 	s.pidMgr = &kv.ProposalIDManager{}
+
+	sm := kv.NewStateMachine(kvStor, s.revMgr)
 	trConfig := &tr.Config{
 		NodeID:   o.NodeID,
 		Peers:    o.PeersAddr,
@@ -91,14 +99,33 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	}
 	s.node = node
 
+	proposeLease := func(cmd *kvpb.Command) error {
+		cmdBytes, err := proto.Marshal(cmd)
+		if err != nil {
+			return err
+		}
+		rev := s.revMgr.Next()
+		op := &kv.ProposalOperation{
+			ProposalID: s.pidMgr.Next(),
+			Revision:   rev,
+			Command:    cmdBytes,
+		}
+		data, err := kv.MarshalProposalOperation(op)
+		if err != nil {
+			return err
+		}
+		_, err = node.Propose(data, op.ProposalID)
+		return err
+	}
+
 	s.kvServer = kv.NewKVServer(node, kvStor, s.revMgr, o.NodeID, s.pidMgr)
 
-	wm := watch.NewWatchManager(revMgr)
-	s.watchServer = watch.NewWatchServer(wm)
+	wm := watch.NewWatchManager(s.revMgr)
+	s.watchServer = watch.NewWatchServer(wm, node, o.NodeID, s.revMgr)
 
-	tw := lease.NewTimeWheel(lease.DefaultTimeWheelConfig())
-	lm := lease.NewLeaseManager(tw, node)
-	s.leaseServer = lease.NewLeaseServer(lm, node, o.NodeID)
+	s.tw = lease.NewTimeWheel(lease.DefaultTimeWheelConfig())
+	lm := lease.NewLeaseManager(s.tw, node, proposeLease)
+	s.leaseServer = lease.NewLeaseServer(lm, node, o.NodeID, s.revMgr)
 
 	sm.SetWatchPublisher(wm)
 	sm.SetLeaseHandler(lm)
@@ -143,6 +170,10 @@ func (s *Server) Serve() error {
 // tryRelease 按依赖反序释放资源，幂等可重复调用。
 // 顺序：先停 Node（停止对两个存储的读写）-> 停 Transport -> 关 Raft 存储 -> 关 KV 存储。
 func (s *Server) tryRelease() {
+	if s.tw != nil {
+		s.tw.Stop()
+		s.tw = nil
+	}
 	if s.node != nil {
 		s.node.Stop() // 其内部 run goroutine 退出时会 Stop transport
 		s.node = nil
