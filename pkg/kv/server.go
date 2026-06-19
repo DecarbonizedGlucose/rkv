@@ -24,16 +24,16 @@ type KVServer struct {
 	stor   storage.Storage
 	revMgr *RevisionManager
 	nodeID uint64
-
-	pid atomic.Uint64
+	pidMgr *ProposalIDManager
 }
 
-func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionManager, nodeID uint64) *KVServer {
+func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionManager, nodeID uint64, pidMgr *ProposalIDManager) *KVServer {
 	return &KVServer{
 		node:   node,
 		stor:   stor,
 		revMgr: revMgr,
 		nodeID: nodeID,
+		pidMgr: pidMgr,
 	}
 }
 
@@ -157,7 +157,7 @@ func (s *KVServer) makeHeader() *kvpb.ResponseHeader {
 }
 
 func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
-	pid := s.pid.Add(1)
+	pid := s.pidMgr.Next()
 
 	cmdBytes, err := proto.Marshal(cmd)
 	if err != nil {
@@ -168,12 +168,12 @@ func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
 	// 避免浪费。此点之后的 gob 编码（marshalProposalOperation）永不失败，
 	// n.Propose 失败产生的 revision 缺口对 BadgerDB 无害（版本只需单调）。
 	rev := s.revMgr.Next()
-	op := &proposalOperation{
+	op := &ProposalOperation{
 		ProposalID: pid,
 		Revision:   rev,
 		Command:    cmdBytes,
 	}
-	data, err := marshalProposalOperation(op)
+	data, err := MarshalProposalOperation(op)
 	if err != nil {
 		log.Printf("KVServer: marshal proposal operation: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
@@ -187,7 +187,7 @@ func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
 		log.Printf("KVServer: propose: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
-	pr, err := unmarshalProposalResult(resultBytes)
+	pr, err := UnmarshalProposalResult(resultBytes)
 	if err != nil {
 		log.Printf("KVServer: unmarshal proposal result: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")

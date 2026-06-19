@@ -15,12 +15,12 @@ import (
 
 func makeEntry(pid, rev uint64, cmd *kvpb.Command) *raftpb.Entry {
 	cmdBytes, _ := proto.Marshal(cmd)
-	op := &proposalOperation{
+	op := &ProposalOperation{
 		ProposalID: pid,
 		Revision:   rev,
 		Command:    cmdBytes,
 	}
-	data, _ := marshalProposalOperation(op)
+	data, _ := MarshalProposalOperation(op)
 	return &raftpb.Entry{Data: data}
 }
 
@@ -61,7 +61,7 @@ func getResult(t *testing.T, sm *StateMachine, entries []*raftpb.Entry) []*kvpb.
 
 	out := make([]*kvpb.Result, 0, len(results))
 	for _, r := range results {
-		pr, err := unmarshalProposalResult(r.Data)
+		pr, err := UnmarshalProposalResult(r.Data)
 		require.NoError(t, err)
 		var res kvpb.Result
 		err = proto.Unmarshal(pr.Result, &res)
@@ -555,8 +555,8 @@ func TestApplyInvalidCommand(t *testing.T) {
 
 	cmd := &kvpb.Command{}
 	cmdBytes, _ := proto.Marshal(cmd)
-	op := &proposalOperation{ProposalID: 1, Revision: 1, Command: cmdBytes}
-	data, _ := marshalProposalOperation(op)
+	op := &ProposalOperation{ProposalID: 1, Revision: 1, Command: cmdBytes}
+	data, _ := MarshalProposalOperation(op)
 
 	entry := &raftpb.Entry{Data: data}
 	_, err := sm.Apply([]*raftpb.Entry{entry})

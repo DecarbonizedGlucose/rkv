@@ -33,6 +33,7 @@ type Server struct {
 	transport tr.Transport
 	raftStor  raftstore.Storage
 	kvStor    storage.Storage
+	pidMgr *kv.ProposalIDManager
 
 	o *option.Option
 }
@@ -60,8 +61,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	}
 	s.kvStor = kvStor
 
-	revMgr := kv.NewRevisionManager(maxRev)
-	sm := kv.NewStateMachine(kvStor, revMgr)
+	s.pidMgr = &kv.ProposalIDManager{}
 	trConfig := &tr.Config{
 		NodeID:   o.NodeID,
 		Peers:    o.PeersAddr,
@@ -91,7 +91,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 	}
 	s.node = node
 
-	s.kvServer = kv.NewKVServer(node, kvStor, revMgr, o.NodeID)
+	s.kvServer = kv.NewKVServer(node, kvStor, s.revMgr, o.NodeID, s.pidMgr)
 
 	wm := watch.NewWatchManager(revMgr)
 	s.watchServer = watch.NewWatchServer(wm)
