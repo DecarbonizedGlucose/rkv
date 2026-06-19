@@ -9,6 +9,7 @@ import (
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/raftpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
+	"github.com/DecarbonizedGlucose/rkv/pkg/util"
 )
 
 var ErrInvalidCommand = errors.New("invalid command")
@@ -30,8 +31,8 @@ type LeaseHandler interface {
 	// Grant 在 apply LeaseGrant 时调用，激活租约并启动定时器。
 	Grant(leaseID int64, ttl int64)
 
-	// Revoke 在 apply LeaseRevoke 时调用，移除租约并停止定时器。
-	Revoke(leaseID int64)
+	// Revoke 在 apply LeaseRevoke 时调用，移除租约并返回所有关联key。
+	Revoke(leaseID int64) [][]byte
 }
 
 // StateMachine 是 Raft 驱动的 KV 状态机，负责应用
@@ -58,12 +59,12 @@ func (sm *StateMachine) Apply(entries []*raftpb.Entry) (results []raftstore.Appl
 		if len(entry.Data) == 0 {
 			continue
 		}
-		op, err := unmarshalProposalOperation(entry.Data)
+		op, err := UnmarshalProposalOperation(entry.Data)
 		if err != nil {
 			return nil, raftstore.ErrApplyCorrupted
 		}
 		rev := op.Revision
-		cmd, err := deserializeCommand(op.Command)
+		cmd, err := DeserializeCommand(op.Command)
 		if err != nil {
 			return nil, raftstore.ErrApplyCorrupted
 		}
@@ -75,7 +76,7 @@ func (sm *StateMachine) Apply(entries []*raftpb.Entry) (results []raftstore.Appl
 		if err != nil {
 			return nil, raftstore.ErrApplyCorrupted
 		}
-		resultData, err := marshalProposalResult(&proposalResult{
+		resultData, err := MarshalProposalResult(&ProposalResult{
 			ProposalID: op.ProposalID,
 			Result:     resBytes,
 		})
@@ -101,6 +102,12 @@ func (sm *StateMachine) applyCommand(cmd *kvpb.Command, rev uint64) (*kvpb.Resul
 	if cmd.GetTxn() != nil {
 		return sm.applyTxn(cmd.GetTxn(), rev)
 	}
+	if cmd.GetLeaseGrant() != nil {
+		return sm.applyLeaseGrant(cmd.GetLeaseGrant())
+	}
+	if cmd.GetLeaseRevoke() != nil {
+		return sm.applyLeaseRevoke(cmd.GetLeaseRevoke(), rev)
+	}
 	return nil, ErrInvalidCommand
 }
 
@@ -113,6 +120,35 @@ func (sm *StateMachine) applyPut(req *kvpb.PutRequest, rev uint64) (*kvpb.Result
 	if req.PrevKv > 0 && prevKV != nil {
 		res.PrevKv = prevKV.ToProto()
 	}
+
+	// 解绑旧 lease（覆盖写时 key 可能已绑定其他 lease）
+	if sm.lm != nil && prevKV != nil && prevKV.LeaseID > 0 {
+		sm.lm.Detach(prevKV.LeaseID, req.Key)
+	}
+	// 绑定新 lease
+	if sm.lm != nil && req.Lease > 0 {
+		sm.lm.Attach(req.Lease, req.Key)
+	}
+	// 发布 Watch 事件
+	if sm.wm != nil {
+		createRev := rev
+		if prevKV != nil {
+			createRev = prevKV.CRevision
+		}
+		var prevProto *kvpb.KeyValue
+		if prevKV != nil {
+			prevProto = prevKV.ToProto()
+		}
+		sm.wm.Publish(req.Key, &kvpb.KeyValue{
+			Key:            req.Key,
+			Value:          req.Value,
+			Revision:       rev,
+			CreateRevision: createRev,
+			ModRevision:    rev,
+			LeaseId:        req.Lease,
+		}, prevProto, kvpb.EventType_PUT)
+	}
+
 	return &kvpb.Result{Res: &kvpb.Result_Put{Put: res}}, nil
 }
 
@@ -129,6 +165,22 @@ func (sm *StateMachine) applyDelete(req *kvpb.DeleteRequest, rev uint64) (*kvpb.
 	if req.PrevKv > 0 && prevKV != nil {
 		res.PrevKv = prevKV.ToProto()
 	}
+
+	if res.Deleted == 1 {
+		// 解绑旧 lease
+		if sm.lm != nil && prevKV != nil && prevKV.LeaseID > 0 {
+			sm.lm.Detach(prevKV.LeaseID, req.Key)
+		}
+		// 发布 Watch 事件
+		if sm.wm != nil {
+			var prevProto *kvpb.KeyValue
+			if prevKV != nil {
+				prevProto = prevKV.ToProto()
+			}
+			sm.wm.Publish(req.Key, nil, prevProto, kvpb.EventType_DELETE)
+		}
+	}
+
 	return &kvpb.Result{Res: &kvpb.Result_Delete{Delete: res}}, nil
 }
 
@@ -148,7 +200,12 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 		ops = req.Failure
 	}
 
-	responses := make([]*kvpb.ResponseOp, 0, len(ops))
+	type txnResult struct {
+		op     *kvpb.RequestOp
+		resp   *kvpb.ResponseOp
+		prevKV *util.InternalKV
+	}
+	results := make([]*txnResult, 0, len(ops))
 	for _, op := range ops {
 		resp, prevKV, err := sm.applyRequestOpTxn(txn, op)
 		if err != nil {
@@ -159,6 +216,60 @@ func (sm *StateMachine) applyTxn(req *kvpb.TxnRequest, rev uint64) (*kvpb.Result
 
 	if err := txn.Commit(); err != nil {
 		return nil, err
+	}
+
+	// Commit 成功后触发 Watch 事件和 Lease 绑定
+	for _, r := range results {
+		switch {
+		case r.op.GetPut() != nil:
+			req := r.op.GetPut()
+			// 解绑旧 lease
+			if sm.lm != nil && r.prevKV != nil && r.prevKV.LeaseID > 0 {
+				sm.lm.Detach(r.prevKV.LeaseID, req.Key)
+			}
+			// 绑定新 lease
+			if sm.lm != nil && req.Lease > 0 {
+				sm.lm.Attach(req.Lease, req.Key)
+			}
+			// 发布 Watch 事件
+			if sm.wm != nil {
+				createRev := rev
+				if r.prevKV != nil {
+					createRev = r.prevKV.CRevision
+				}
+				var prevProto *kvpb.KeyValue
+				if r.prevKV != nil {
+					prevProto = r.prevKV.ToProto()
+				}
+				sm.wm.Publish(req.Key, &kvpb.KeyValue{
+					Key:            req.Key,
+					Value:          req.Value,
+					Revision:       rev,
+					CreateRevision: createRev,
+					ModRevision:    rev,
+					LeaseId:        req.Lease,
+				}, prevProto, kvpb.EventType_PUT)
+			}
+
+		case r.op.GetDelete() != nil:
+			req := r.op.GetDelete()
+			// 仅 key 实际被删除时触发
+			if r.prevKV != nil {
+				// 解绑旧 lease
+				if sm.lm != nil && r.prevKV.LeaseID > 0 {
+					sm.lm.Detach(r.prevKV.LeaseID, req.Key)
+				}
+				// 发布 Watch 事件
+				if sm.wm != nil {
+					sm.wm.Publish(req.Key, nil, r.prevKV.ToProto(), kvpb.EventType_DELETE)
+				}
+			}
+		}
+	}
+
+	responses := make([]*kvpb.ResponseOp, 0, len(results))
+	for _, r := range results {
+		responses = append(responses, r.resp)
 	}
 
 	return &kvpb.Result{
@@ -220,32 +331,32 @@ func (sm *StateMachine) evalCompareTxn(txn storage.Transaction, cmp *kvpb.Compar
 	}
 }
 
-func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.RequestOp) (*kvpb.ResponseOp, error) {
+func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.RequestOp) (*kvpb.ResponseOp, *util.InternalKV, error) {
 	switch {
 	case op.GetPut() != nil:
 		prevKV, err := txn.Put(op.GetPut().Key, op.GetPut().Value, op.GetPut().Lease)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		res := &kvpb.PutResponse{}
 		if op.GetPut().PrevKv > 0 && prevKV != nil {
 			res.PrevKv = prevKV.ToProto()
 		}
-		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Put{Put: res}}, nil
+		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Put{Put: res}}, prevKV, nil
 	case op.GetDelete() != nil:
 		prevKV, err := txn.Delete(op.GetDelete().Key)
 		res := &kvpb.DeleteResponse{}
 		if err == storage.ErrKeyNotFound {
 			res.Deleted = 0
 		} else if err != nil {
-			return nil, err
+			return nil, nil, err
 		} else {
 			res.Deleted = 1
 			if op.GetDelete().PrevKv > 0 && prevKV != nil {
 				res.PrevKv = prevKV.ToProto()
 			}
 		}
-		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Delete{Delete: res}}, nil
+		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Delete{Delete: res}}, prevKV, nil
 	case op.GetRange() != nil:
 		req := op.GetRange()
 		start := req.RangeStart
@@ -255,7 +366,7 @@ func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.Requ
 		}
 		ikvs, more, err := txn.Range(start, end, int(req.Limit), nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		kvs := make([]*kvpb.KeyValue, 0, len(ikvs))
 		for _, ikv := range ikvs {
@@ -263,9 +374,44 @@ func (sm *StateMachine) applyRequestOpTxn(txn storage.Transaction, op *kvpb.Requ
 		}
 		return &kvpb.ResponseOp{Response: &kvpb.ResponseOp_Range{Range: &kvpb.RangeResponse{
 			Kvs: kvs, More: more, Count: int64(len(kvs)),
-		}}}, nil
+		}}}, nil, nil
 	}
-	return nil, ErrInvalidCommand
+	return nil, nil, ErrInvalidCommand
+}
+
+func (sm *StateMachine) applyLeaseGrant(cmd *kvpb.LeaseGrantCommand) (*kvpb.Result, error) {
+	if sm.lm != nil {
+		sm.lm.Grant(cmd.Id, cmd.Ttl)
+	}
+	return &kvpb.Result{Res: &kvpb.Result_LeaseGrant{
+		LeaseGrant: &kvpb.LeaseGrantResponse{
+			Id:  cmd.Id,
+			Ttl: cmd.Ttl,
+		},
+	}}, nil
+}
+
+func (sm *StateMachine) applyLeaseRevoke(cmd *kvpb.LeaseRevokeCommand, rev uint64) (*kvpb.Result, error) {
+	var keys [][]byte
+	if sm.lm != nil {
+		keys = sm.lm.Revoke(cmd.Id)
+	}
+	for _, key := range keys {
+		prevKV, err := sm.stor.Delete(key, rev)
+		if err != nil {
+			return nil, err
+		}
+		if sm.wm != nil {
+			var prevProto *kvpb.KeyValue
+			if prevKV != nil {
+				prevProto = prevKV.ToProto()
+			}
+			sm.wm.Publish(key, nil, prevProto, kvpb.EventType_DELETE)
+		}
+	}
+	return &kvpb.Result{Res: &kvpb.Result_LeaseRevoke{
+		LeaseRevoke: &kvpb.LeaseRevokeResponse{},
+	}}, nil
 }
 
 func (sm *StateMachine) SnapshotData() ([]byte, error) {
