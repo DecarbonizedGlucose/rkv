@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"sync"
 	"sync/atomic"
 
@@ -36,17 +37,53 @@ func NewWatchManager(revMgr *kv.RevisionManager) *WatchManager {
 }
 
 func (wm *WatchManager) Subscribe(key []byte, prefix bool, startRev uint64, prevKV bool) *Watcher {
-	return nil
+	id := wm.nextID.Add(1)
+	w := &Watcher{
+		ID:       id,
+		Key:      key,
+		Prefix:   prefix,
+		StartRev: startRev,
+		PrevKV:   prevKV,
+		EventCh:  make(chan *kvpb.Event, 256),
+	}
+	wm.mu.Lock()
+	wm.watchers[id] = w
+	wm.mu.Unlock()
+	return w
 }
 
 func (wm *WatchManager) Cancel(id int64) {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
 
+	if w, ok := wm.watchers[id]; ok {
+		delete(wm.watchers, id)
+		close(w.EventCh)
+	}
 }
 
 func (wm *WatchManager) Publish(key []byte, kv, prevKV *kvpb.KeyValue, eventType kvpb.EventType) {
-
+	ev := &kvpb.Event{
+		Type:   eventType,
+		Kv:     kv,
+		PrevKv: prevKV,
+	}
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	for _, w := range wm.watchers {
+		if match(w, key) {
+			select {
+			case w.EventCh <- ev:
+			default:
+				// 慢消费者，通道满，丢弃事件以避免阻塞 Apply 路径。
+			}
+		}
+	}
 }
 
 func match(w *Watcher, key []byte) bool {
-	return false
+	if w.Prefix {
+		return bytes.HasPrefix(key, w.Key)
+	}
+	return bytes.Equal(key, w.Key)
 }
