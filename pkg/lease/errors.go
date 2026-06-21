@@ -1,8 +1,8 @@
 package lease
 
-import "errors"
+import rkvErrors "github.com/DecarbonizedGlucose/rkv/pkg/errors"
 
 var (
-	ErrLeaseNotFound = errors.New("lease not found")
-	ErrNotLeader     = errors.New("not leader")
+	ErrLeaseNotFound = rkvErrors.ErrLeaseNotFound
+	ErrNotLeader     = rkvErrors.ErrNotLeader
 )

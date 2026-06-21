@@ -41,7 +41,7 @@ func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionMan
 func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResponse, error) {
 	if !s.isLeader(ctx) {
 		log.Println("KVServer: get request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
 	ikv, err := s.stor.Get(req.Key, s.revMgr.Peek())
 	if err == storage.ErrKeyNotFound { // ikv == nil
@@ -63,7 +63,7 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.RangeResponse, error) {
 	if !s.isLeader(ctx) {
 		log.Println("KVServer: range request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
 	end := req.RangeEnd
 	if len(end) == 0 {
@@ -91,9 +91,9 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 func (s *KVServer) Put(ctx context.Context, req *kvpb.PutRequest) (*kvpb.PutResponse, error) {
 	if !s.isLeader(ctx) {
 		log.Println("KVServer: put request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
-	res, err := s.proposeWrite(&kvpb.Command{
+	res, err := s.proposeWrite(ctx, &kvpb.Command{
 		Op: &kvpb.Command_Put{Put: req},
 	})
 	if err != nil {
@@ -107,9 +107,9 @@ func (s *KVServer) Put(ctx context.Context, req *kvpb.PutRequest) (*kvpb.PutResp
 func (s *KVServer) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.DeleteResponse, error) {
 	if !s.isLeader(ctx) {
 		log.Println("KVServer: delete request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
-	res, err := s.proposeWrite(&kvpb.Command{
+	res, err := s.proposeWrite(ctx, &kvpb.Command{
 		Op: &kvpb.Command_Delete{Delete: req},
 	})
 	if err != nil {
@@ -123,9 +123,9 @@ func (s *KVServer) Delete(ctx context.Context, req *kvpb.DeleteRequest) (*kvpb.D
 func (s *KVServer) Txn(ctx context.Context, req *kvpb.TxnRequest) (*kvpb.TxnResponse, error) {
 	if !s.isLeader(ctx) {
 		log.Println("KVServer: txn request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
-	res, err := s.proposeWrite(&kvpb.Command{
+	res, err := s.proposeWrite(ctx, &kvpb.Command{
 		Op: &kvpb.Command_Txn{Txn: req},
 	})
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *KVServer) makeHeader() *kvpb.ResponseHeader {
 	}
 }
 
-func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
+func (s *KVServer) proposeWrite(ctx context.Context, cmd *kvpb.Command) (*kvpb.Result, error) {
 	pid := s.pidMgr.Next()
 
 	cmdBytes, err := proto.Marshal(cmd)
@@ -180,7 +180,8 @@ func (s *KVServer) proposeWrite(cmd *kvpb.Command) (*kvpb.Result, error) {
 	if err != nil {
 		if err == raftstore.ErrNotLeader {
 			log.Println("KVServer: propose rejected, not leader")
-			return nil, status.Error(codes.Unavailable, "not leader")
+			grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
+			return nil, status.Error(codes.FailedPrecondition, "not leader")
 		}
 		log.Printf("KVServer: propose: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")

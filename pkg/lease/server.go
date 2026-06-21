@@ -2,6 +2,7 @@ package lease
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"log"
 
@@ -31,12 +32,12 @@ func NewLeaseServer(lm *LeaseManager, node *raftstore.Node, nodeID uint64, revMg
 
 func (s *LeaseServer) LeaseGrant(ctx context.Context, req *kvpb.LeaseGrantRequest) (*kvpb.LeaseGrantResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Println("LeaseServer: get request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		log.Println("LeaseServer: LeaseGrant rejected, not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
 	id, err := s.lm.LeaseGrant(req.Id, req.Ttl)
 	if err != nil {
-		log.Printf("LeaseServer: grant lease failed: %v", err)
+		log.Printf("LeaseServer: LeaseGrant failed: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 	return &kvpb.LeaseGrantResponse{
@@ -48,11 +49,11 @@ func (s *LeaseServer) LeaseGrant(ctx context.Context, req *kvpb.LeaseGrantReques
 
 func (s *LeaseServer) LeaseRevoke(ctx context.Context, req *kvpb.LeaseRevokeRequest) (*kvpb.LeaseRevokeResponse, error) {
 	if !s.isLeader(ctx) {
-		log.Println("LeaseServer: get request rejected, not leader")
-		return nil, status.Error(codes.Unavailable, "not leader")
+		log.Println("LeaseServer: LeaseRevoke rejected, not leader")
+		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
 	if err := s.lm.LeaseRevoke(req.Id); err != nil {
-		log.Printf("LeaseServer: revoke lease failed: %v", err)
+		log.Printf("LeaseServer: LeaseRevoke failed: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 	return &kvpb.LeaseRevokeResponse{
@@ -64,12 +65,17 @@ func (s *LeaseServer) LeaseKeepAlive(stream rpcpb.LeaseService_LeaseKeepAliveSer
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			return nil // io.EOF 客户端关闭
+			return nil // io.EOF：客户端关闭流
 		}
 		ttl, err := s.lm.KeepAlive(req.Id)
 		if err != nil {
-			log.Printf("LeaseServer: keep alive failed: %v", err)
-			return status.Error(codes.NotFound, err.Error())
+			log.Printf("LeaseServer: KeepAlive(%d) failed: %v", req.Id, err)
+			// 区分两种失败：
+			if stderrors.Is(err, ErrNotLeader) {
+				grpc.SetTrailer(stream.Context(), metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
+				return status.Error(codes.FailedPrecondition, "not leader")
+			}
+			return status.Error(codes.NotFound, "lease not found")
 		}
 		if err := stream.Send(&kvpb.LeaseKeepAliveResponse{
 			Header: s.makeHeader(),
