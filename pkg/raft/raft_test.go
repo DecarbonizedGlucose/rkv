@@ -255,11 +255,12 @@ func TestLogReplicationConflict(t *testing.T) {
 		Body: &raftpb.RaftMessage_Propose{Propose: &raftpb.Entry{Data: []byte("2")}},
 	})
 	relayAppendResponses(t, n1, n2)
-	require.Equal(t, uint64(2), n1.raftLog.lastLogIndex())
-	require.Equal(t, uint64(2), n2.raftLog.lastLogIndex())
+	// index: 1=no-op(from becomeLeader), 2="1", 3="2"
+	require.Equal(t, uint64(3), n1.raftLog.lastLogIndex())
+	require.Equal(t, uint64(3), n2.raftLog.lastLogIndex())
 
-	// n2 制造冲突：把 index=2 的 term 改成 9
-	n2.raftLog.entries[2].Term = 9
+	// n2 制造冲突：把 index=3 (entries[3]) 的 term 改成 9
+	n2.raftLog.entries[3].Term = 9
 
 	// propose 第三条 → leader PrevLogIndex=2, PrevLogTerm=1
 	// n2 的 term(2)=9 ≠ 1 → 拒绝 → leader 回退 → 第二轮成功
@@ -322,7 +323,8 @@ func TestCommitWithHeartbeat(t *testing.T) {
 	for _, m := range msgs {
 		if m.To == 2 {
 			n2.step(m)
-			assert.Equal(t, uint64(1), n2.hardState.CommitIndex)
+			// index 1=no-op (from becomeLeader), index 2="y"; commit covers both
+			assert.Equal(t, uint64(2), n2.hardState.CommitIndex)
 		}
 	}
 }

@@ -132,7 +132,11 @@ func (r *Raft) becomeLeader() {
 		pr.NextIndex = r.raftLog.lastLogIndex() + 1
 	}
 
-	r.broadcastHeartbeat()
+	// Raft 安全性：新 Leader 不能直接提交前任 term 的 entry。
+	// 追加一条空 no-op entry（Data=nil）并广播，当 no-op 被多数派确认后，
+	// CommitIndex 推进，前任遗留的已复制 entry 随之全部被 apply。
+	// StateMachine.Apply 对 Data==nil 的 entry 直接跳过，对上层透明。
+	r.handlePropose(&raftpb.Entry{})
 }
 
 func (r *Raft) maybeCommit() {
@@ -423,7 +427,10 @@ func (r *Raft) handleRequestVote(m *raftpb.RaftMessage) {
 }
 
 func (r *Raft) handleRequestVoteResponse(m *raftpb.RaftMessage) {
-	// step() 已处理 m.Term > hardState.Term 的降级
+	// 只有 Candidate 才处理投票响应；Leader/Follower 收到的是过期消息。
+	if r.state != stateCandidate {
+		return
+	}
 	if m.Term < r.hardState.Term {
 		return
 	}

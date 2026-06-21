@@ -47,11 +47,12 @@ type mockStateMachine struct {
 func (sm *mockStateMachine) Apply(entries []*raftpb.Entry) (results []raftstore.ApplyResult, err error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	for _, e := range entries {
-		sm.applied = append(sm.applied, e.Data)
-	}
 	results = make([]raftstore.ApplyResult, 0, len(entries))
 	for _, e := range entries {
+		if len(e.Data) == 0 {
+			continue // no-op entry (new leader commits pending entries from prev term)
+		}
+		sm.applied = append(sm.applied, e.Data)
 		pid := sm.pid
 		sm.pid++
 		results = append(results, raftstore.ApplyResult{ProposalID: pid, Data: e.Data})
