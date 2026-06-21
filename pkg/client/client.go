@@ -115,7 +115,7 @@ func (c *Client) switchTo(addr string) error {
 }
 
 // tryFollowLeader 从 trailer 解析 leader-id，切换到 Leader 节点。
-// 仅集群模式（peers != nil）生效；成功返回 true。
+// 仅集群模式生效；成功返回 true。
 func (c *Client) tryFollowLeader(trailer metadata.MD) bool {
 	if c.peers == nil {
 		return false
@@ -136,7 +136,11 @@ func (c *Client) tryFollowLeader(trailer metadata.MD) bool {
 }
 
 // callUnary 执行一元 gRPC 调用并捕获 trailer。
-// 收到 ErrNotLeader 时自动跟随 Leader 重试一次。
+//
+// 集群模式下，如果收到 ErrNotLeader，通过 trailer 中的 leader-id 切换到 Leader 重试一次。
+// 如果收到 ErrUnavailable（集群模式），当前节点不可达，遍历所有 peer 直到找到可用节点。
+//
+// 单点模式下，直接返回错误，不进行重试。
 func callUnary[Req, Resp any](
 	c *Client,
 	ctx context.Context,
@@ -145,13 +149,36 @@ func callUnary[Req, Resp any](
 ) (Resp, error) {
 	var trailer metadata.MD
 	resp, err := fn(ctx, req, grpc.Trailer(&trailer))
-	if err != nil {
-		if errors.Is(translateErr(err), ErrNotLeader) && c.tryFollowLeader(trailer) {
-			resp, err = fn(ctx, req)
-		}
+	if err == nil {
+		return resp, nil
+	}
+
+	translated := translateErr(err)
+
+	if errors.Is(translated, ErrNotLeader) && c.tryFollowLeader(trailer) {
+		resp, err = fn(ctx, req)
 		return resp, translateErr(err)
 	}
-	return resp, nil
+
+	// 集群模式, 当前节点不可达时，遍历所有 peer 寻找存活节点
+	if errors.Is(translated, ErrUnavailable) && c.peers != nil {
+		for _, addr := range c.peers {
+			if c.switchTo(addr) != nil {
+				continue
+			}
+			var t2 metadata.MD
+			resp, err = fn(ctx, req, grpc.Trailer(&t2))
+			if err == nil {
+				return resp, nil
+			}
+			if errors.Is(translateErr(err), ErrNotLeader) && c.tryFollowLeader(t2) {
+				resp, err = fn(ctx, req)
+				return resp, translateErr(err)
+			}
+		}
+	}
+
+	return resp, translated
 }
 
 func newClient(conn *grpc.ClientConn, peers map[uint64]string, opts []grpc.DialOption) *Client {
