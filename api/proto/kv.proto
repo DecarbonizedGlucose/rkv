@@ -1,0 +1,260 @@
+syntax = "proto3";
+
+package kvpb;
+
+option go_package = "github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb";
+
+// ========================================
+// 基础数据类型
+// ========================================
+
+// ResponseHeader 附在所有读/写响应中，提供集群元数据。
+message ResponseHeader {
+    uint64 member_id = 1; // 处理请求的节点 ID
+    uint64 revision  = 2; // 响应时的集群全局 revision
+    uint64 raft_term = 3; // 当前 Raft 任期
+}
+
+// KeyValue 是 KV 存储中单条记录的完整视图。
+message KeyValue {
+    bytes  key             = 1;
+    bytes  value           = 2;
+    uint64 revision        = 3; // 写入该版本时的全局 revision（与 mod_revision 相同）
+    uint64 create_revision = 4; // 该 key 首次创建时的全局 revision
+    uint64 mod_revision    = 5; // 该 key 最后一次修改时的全局 revision
+    int64  lease_id        = 6; // 关联的 LeaseID；0 = 无关联
+}
+
+// ========================================
+// 内部 Command / Result（Raft 日志条目载荷）
+// ========================================
+
+// Command 是写入 Raft 日志的操作载荷，由 Leader 序列化后提案。
+message Command {
+    oneof op {
+        PutRequest         put          = 1;
+        DeleteRequest      delete       = 2;
+        TxnRequest         txn          = 3;
+        LeaseGrantCommand  lease_grant  = 4;
+        LeaseRevokeCommand lease_revoke = 5;
+    }
+}
+
+// Result 是 Apply 路径产出的响应载荷，通过 ProposalID 路由回 Leader 的等待队列。
+// LeaseGrant/LeaseRevoke 由 applier 直接处理，无需序列化回 proposer，故不在此列。
+message Result {
+    oneof res {
+        PutResponse         put          = 1;
+        DeleteResponse      delete       = 2;
+        TxnResponse         txn          = 3;
+        LeaseGrantResponse  lease_grant  = 4;
+        LeaseRevokeResponse lease_revoke = 5;
+    }
+}
+
+// ========================================
+// Get
+// ========================================
+
+message GetRequest {
+    bytes key = 1;
+}
+
+// GetResponse 返回单个 key 的查询结果。
+// kv 为 nil 且 count=0 表示 key 不存在。
+message GetResponse {
+    ResponseHeader header = 1;
+    KeyValue       kv     = 2;
+    int64          count  = 3; // 0 或 1；等价于 kv != nil
+}
+
+// ========================================
+// Put
+// ========================================
+
+message PutRequest {
+    bytes key     = 1;
+    bytes value   = 2;
+    int64 prev_kv = 3; // 非零则在响应中返回修改前的 KV
+    int64 lease   = 4; // 关联的 LeaseID；0 = 不关联
+}
+
+message PutResponse {
+    ResponseHeader header  = 1;
+    KeyValue       prev_kv = 2; // 修改前的 KV；仅 prev_kv != 0 时填充
+}
+
+// ========================================
+// Delete
+// ========================================
+
+message DeleteRequest {
+    bytes key     = 1;
+    int64 prev_kv = 2; // 非零则在响应中返回删除前的 KV
+}
+
+message DeleteResponse {
+    ResponseHeader header  = 1;
+    int64          deleted = 2; // 实际删除的条数（0 或 1）
+    KeyValue       prev_kv = 3; // 删除前的 KV；仅 prev_kv != 0 且 key 存在时填充
+}
+
+// ========================================
+// Range 范围查询
+// 前缀扫描：range_end = prefix + 0xFF
+// 分页查询：配合 limit 使用，more=true 表示还有更多
+// ========================================
+
+message RangeRequest {
+    bytes  range_start = 1; // 起始 key（含），不能为空
+    bytes  range_end   = 2; // 结束 key（不含）；为空表示 [range_start, +∞)
+    int64  limit       = 3; // 最多返回条数；0 = 无限制
+    uint64 revision    = 4; // 读取指定 revision 的快照；0 = 读最新
+    bool   keys_only   = 5; // 只返回 key，value 置空
+    bool   count_only  = 6; // 只返回 count，kvs 置空
+}
+
+message RangeResponse {
+    ResponseHeader    header = 1;
+    repeated KeyValue kvs    = 2;
+    int64             count  = 3; // 实际返回的条数（受 limit 约束）
+    bool              more   = 4; // 是否存在 limit 外的更多结果
+}
+
+// ========================================
+// Txn 事务（Compare-And-Swap）
+// ========================================
+
+// Compare 描述一个比较条件：target 字段的值与 target_value 做 result 比较。
+message Compare {
+    enum CompareResult {
+        EQUAL     = 0;
+        GREATER   = 1;
+        LESS      = 2;
+        NOT_EQUAL = 3;
+    }
+
+    // CompareTarget 决定用 key 的哪个属性做比较。
+    enum CompareTarget {
+        VERSION = 0; // mod_revision
+        CREATE  = 1; // create_revision
+        VALUE   = 2; // value 字节序
+        LEASE   = 3; // lease_id
+    }
+
+    CompareResult result = 1;
+    CompareTarget target = 2;
+    bytes         key    = 3;
+
+    oneof target_value {
+        uint64 version = 4; // 用于 VERSION / CREATE / LEASE 比较（统一用 uint64 避免符号歧义）
+        bytes  value   = 5; // 用于 VALUE 比较
+    }
+}
+
+message RequestOp {
+    oneof request {
+        PutRequest    put    = 1;
+        DeleteRequest delete = 2;
+        RangeRequest  range  = 3;
+    }
+}
+
+message ResponseOp {
+    oneof response {
+        PutResponse    put    = 1;
+        DeleteResponse delete = 2;
+        RangeResponse  range  = 3;
+    }
+}
+
+message TxnRequest {
+    repeated Compare   compares = 1; // 所有条件均满足则走 success 分支，否则走 failure 分支
+    repeated RequestOp success  = 2;
+    repeated RequestOp failure  = 3;
+}
+
+message TxnResponse {
+    ResponseHeader      header    = 1;
+    bool                succeeded = 2; // true = compares 全部满足，执行了 success 分支
+    repeated ResponseOp responses = 3;
+}
+
+// ========================================
+// Watch 事件
+// ========================================
+
+enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    PUT    = 1;  // 写入或更新
+    DELETE = 2;  // 删除
+}
+
+message Event {
+    EventType type    = 1;
+    KeyValue  kv      = 2; // 当前 KV
+    KeyValue  prev_kv = 3; // 修改前的 KV, 删除时非空, Put 时可选
+}
+
+// ========================================
+// Watch 请求/相应
+// ========================================
+
+message WatchRequest {
+    bytes  key              = 1;
+    bool   prefix           = 2;
+    uint64 start_revision   = 3; // 0 = 从当前 revision 开始
+    bool   prev_kv          = 4;
+    bool   progress_notify  = 5;
+}
+
+message WatchResponse {
+    ResponseHeader  header           = 1;
+    int64           watch_id         = 2;
+    bool            created          = 3;
+    bool            canceled         = 4;
+    uint64          compact_revision = 5; // 已 compact 的最大 revision（客户端 start_revision 过旧时填充）
+    repeated Event  events           = 6;
+}
+
+// ========================================
+// Lease
+// ========================================
+
+message LeaseGrantCommand {
+    int64 id  = 1; // 预分配 LeaseID
+    int64 ttl = 2; // TTL
+}
+
+message LeaseRevokeCommand {
+    int64 id = 1; // LeaseID
+}
+
+message LeaseGrantRequest {
+    int64 id  = 1; // 请求的 LeaseID, 0 = 自动分配
+    int64 ttl = 2; // TTL
+}
+
+message LeaseGrantResponse {
+    ResponseHeader header = 1;
+    int64          id     = 2; // 分配的 LeaseID
+    int64          ttl    = 3; // 实际 TTL
+}
+
+message LeaseRevokeRequest {
+    int64 id = 1;
+}
+
+message LeaseRevokeResponse {
+    ResponseHeader header = 1;
+}
+
+message LeaseKeepAliveRequest {
+    int64 id = 1;
+}
+
+message LeaseKeepAliveResponse {
+    ResponseHeader header = 1;
+    int64          id     = 2; // LeaseID
+    int64          ttl    = 3; // 续约后的 TTL
+}
