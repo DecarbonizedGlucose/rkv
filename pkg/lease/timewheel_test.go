@@ -199,13 +199,16 @@ func TestTimeWheelRenewal(t *testing.T) {
 	defer tw.Stop()
 
 	var fired atomic.Bool
+	var mu sync.Mutex
 	var fireTime time.Time
 
 	// Schedule task at 200ms
 	start := time.Now()
 	id := tw.Add(200*time.Millisecond, func() {
 		fired.Store(true)
+		mu.Lock()
 		fireTime = time.Now()
+		mu.Unlock()
 	})
 
 	// At 100ms: simulate KeepAlive — Cancel old, re-Add new at 300ms from now
@@ -213,7 +216,9 @@ func TestTimeWheelRenewal(t *testing.T) {
 	tw.Cancel(id)
 	id2 := tw.Add(300*time.Millisecond, func() {
 		fired.Store(true)
+		mu.Lock()
 		fireTime = time.Now()
+		mu.Unlock()
 	})
 	require.NotZero(t, id2)
 
@@ -226,6 +231,9 @@ func TestTimeWheelRenewal(t *testing.T) {
 	time.Sleep(300 * time.Millisecond) // total: 550ms from start
 	assert.True(t, fired.Load(),
 		"renewed timer should fire at extended deadline")
-	assert.True(t, fireTime.After(start.Add(350*time.Millisecond)),
-		"fire time %v should be after extended deadline (~400ms)", fireTime)
+	mu.Lock()
+	ft := fireTime
+	mu.Unlock()
+	assert.True(t, ft.After(start.Add(350*time.Millisecond)),
+		"fire time %v should be after extended deadline (~400ms)", ft)
 }
