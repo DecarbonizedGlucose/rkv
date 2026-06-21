@@ -480,3 +480,63 @@ func TestFollowerInstallSnapshotRejectOld(t *testing.T) {
 	require.Len(t, resps, 1)
 	assert.False(t, resps[0].Body.(*raftpb.RaftMessage_SnapResp).SnapResp.Success)
 }
+
+// TestSnapshotTransfer 验证快照传输全流程：
+// Leader 日志压缩后，落后的 Follower 收到 INSTALL_SNAPSHOT_REQ，
+// 正确设置 pendingSnapshot，并返回 Success 响应，Leader 更新 Progress。
+func TestSnapshotTransfer(t *testing.T) {
+	snapData := []byte("kv-snapshot")
+	cs := &raftpb.ConfState{Nodes: []uint64{1, 2}}
+
+	// === 阶段 1：单节点 Leader 提案 5 条 entry，CommitIndex 推进到 6 ===
+	n1 := newTestRaft(1, []uint64{1})
+	n1.step(&raftpb.RaftMessage{Type: raftpb.MessageType_HUP})
+	assertState(t, n1, stateLeader)
+	// no-op entry 在 index=1，CommitIndex=1
+	for i := 2; i <= 6; i++ {
+		n1.step(&raftpb.RaftMessage{
+			Type: raftpb.MessageType_PROPOSE,
+			Body: &raftpb.RaftMessage_Propose{Propose: &raftpb.Entry{Data: []byte{byte(i)}}},
+		})
+	}
+	require.Equal(t, uint64(6), n1.hardState.CommitIndex)
+
+	// === 阶段 2：将内存日志同步到 MemoryStorage，创建快照并压缩 ===
+	ms := n1.raftLog.storage.(*MemoryStorage)
+	// entries[0] 是哨兵，entries[1:] 是真实 entry（index 1..6）
+	require.NoError(t, ms.Append(n1.raftLog.entries[1:]))
+	_, err := ms.CreateSnapshot(6, cs, snapData)
+	require.NoError(t, err)
+	require.NoError(t, ms.Compact(6))
+	n1.raftLog.maybeCompact() // 更新内存哨兵 lastIncluded=6
+	require.Equal(t, uint64(6), n1.raftLog.getLastIncluded())
+
+	// === 阶段 3：将 n2 注册进 n1 的 prs，NextIndex=1 < lastIncluded=6 ===
+	n1.prs[2] = &Progress{NextIndex: 1, MatchIndex: 0}
+	n1.sendAppend(2)
+	msgs := readMessages(n1)
+	require.Len(t, msgs, 1)
+	snapMsg := msgs[0]
+	require.Equal(t, raftpb.MessageType_INSTALL_SNAPSHOT_REQ, snapMsg.Type)
+
+	// === 阶段 4：n2 接收快照，pendingSnapshot 应被设置 ===
+	n2 := newTestRaft(2, []uint64{1, 2})
+	require.NoError(t, n2.step(snapMsg))
+
+	require.NotNil(t, n2.raftLog.pendingSnapshot, "pendingSnapshot must be set after receiving snapshot")
+	assert.Equal(t, uint64(6), n2.raftLog.pendingSnapshot.Metadata.LastIncludedIndex)
+	assert.Equal(t, snapData, n2.raftLog.pendingSnapshot.Data)
+	assert.Equal(t, uint64(6), n2.hardState.CommitIndex)
+	assert.Equal(t, uint64(6), n2.raftLog.getLastIncluded())
+
+	// === 阶段 5：n2 返回 Success 响应，n1 更新 n2 的 Progress ===
+	resps := readMessages(n2)
+	require.Len(t, resps, 1)
+	snapResp := resps[0]
+	assert.Equal(t, raftpb.MessageType_INSTALL_SNAPSHOT_RESP, snapResp.Type)
+	assert.True(t, snapResp.Body.(*raftpb.RaftMessage_SnapResp).SnapResp.Success)
+
+	require.NoError(t, n1.step(snapResp))
+	assert.Equal(t, uint64(6), n1.prs[2].MatchIndex)
+	assert.Equal(t, uint64(7), n1.prs[2].NextIndex)
+}

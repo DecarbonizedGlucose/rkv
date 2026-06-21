@@ -114,7 +114,8 @@ func (s *MemoryStorage) LastIndex() (uint64, error) {
 }
 
 func (s *MemoryStorage) firstIndex() uint64 {
-	return s.entries[0].Index
+	// 返回第一个可用 entry 的 index
+	return s.entries[0].Index + 1
 }
 
 func (s *MemoryStorage) FirstIndex() (uint64, error) {

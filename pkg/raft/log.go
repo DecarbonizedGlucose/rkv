@@ -41,12 +41,8 @@ func newRaftLog(storage RaftStorage) (*RaftLog, error) {
 	if err != nil {
 		return nil, fmt.Errorf("raft: read last index: %v", err.Error())
 	}
-	// 哨兵条目代表快照覆盖的最后一条日志
+	// 哨兵条目代表快照覆盖的最后一条日志（firstIndex 始终 >= 1）
 	dummy := &raftpb.Entry{Index: firstIndex - 1}
-	if firstIndex == 0 {
-		dummy.Index = 0
-		firstIndex = 1
-	}
 
 	entries := []*raftpb.Entry{dummy}
 	if firstIndex <= lastIndex {

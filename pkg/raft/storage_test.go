@@ -180,7 +180,7 @@ func TestMemoryStorageFirstLastIndex(t *testing.T) {
 
 	first, err := s.FirstIndex()
 	require.NoError(t, err)
-	assert.Equal(t, uint64(0), first)
+	assert.Equal(t, uint64(1), first)
 
 	last, err := s.LastIndex()
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestMemoryStorageFirstLastIndexEmpty(t *testing.T) {
 
 	first, _ := s.FirstIndex()
 	last, _ := s.LastIndex()
-	assert.Equal(t, uint64(0), first)
+	assert.Equal(t, uint64(1), first)
 	assert.Equal(t, uint64(0), last)
 }
 
@@ -260,9 +260,9 @@ func TestMemoryStorageApplySnapshot(t *testing.T) {
 	}
 	require.NoError(t, s.ApplySnapshot(snap))
 
-	// entries 被重置
+	// entries 被重置，firstIndex = lastIncludedIndex + 1
 	first, _ := s.FirstIndex()
-	assert.Equal(t, uint64(5), first)
+	assert.Equal(t, uint64(6), first)
 
 	// 旧条目被压缩
 	_, err := s.Entries(1, 3)
@@ -302,9 +302,9 @@ func TestMemoryStorageCompact(t *testing.T) {
 
 	require.NoError(t, s.Compact(2))
 
-	// FirstIndex 变为被 compact 的新哨兵索引
+	// FirstIndex 变为 compacted sentinel + 1
 	first, _ := s.FirstIndex()
-	assert.Equal(t, uint64(2), first)
+	assert.Equal(t, uint64(3), first)
 
 	// 旧条目不可读
 	_, err := s.Entries(1, 2)
