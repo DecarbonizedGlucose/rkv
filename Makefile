@@ -1,6 +1,6 @@
 GO := go
 
-.PHONY: proto build test-unit test-node clean
+.PHONY: proto build test-unit test-node test-cluster clean
 
 proto:
 	bash api/proto/compile.sh
@@ -22,6 +22,9 @@ test-node: build
 	$(GO) test -v -count=1 -timeout 30s ./test/integration/; \
 	kill -9 $$PID 2>/dev/null; \
 	rm -rf /tmp/rkv-*
+
+test-cluster: build
+	$(GO) test -v -count=1 -timeout 120s ./test/cluster/
 
 clean:
 	rm -rf bin/
