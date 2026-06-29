@@ -535,7 +535,7 @@ func (r *Raft) handleInstallSnapshot(m *raftpb.RaftMessage) {
 
 	snapshot := &raftpb.Snapshot{}
 	err := proto.Unmarshal(req.Data, snapshot)
-	if err != nil || r.raftLog.getLastIncluded() > snapshot.Metadata.LastIncludedIndex {
+	if err != nil || snapshot.Metadata == nil || r.raftLog.getLastIncluded() > snapshot.Metadata.LastIncludedIndex {
 		r.send(msg)
 		return
 	}

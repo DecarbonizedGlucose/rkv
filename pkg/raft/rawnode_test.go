@@ -154,6 +154,12 @@ func TestRawNodeStepLocalMsg(t *testing.T) {
 	assert.ErrorIs(t, err, ErrStepLocalMsg)
 }
 
+func TestRawNodeStepNilMsg(t *testing.T) {
+	rn := newTestRawNode(1, []uint64{1})
+
+	assert.ErrorIs(t, rn.Step(nil), ErrStepNilMsg)
+}
+
 // ========================================
 // Snapshot in Ready
 // ========================================

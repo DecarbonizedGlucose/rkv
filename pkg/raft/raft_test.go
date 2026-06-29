@@ -481,6 +481,29 @@ func TestFollowerInstallSnapshotRejectOld(t *testing.T) {
 	assert.False(t, resps[0].Body.(*raftpb.RaftMessage_SnapResp).SnapResp.Success)
 }
 
+func TestFollowerInstallSnapshotRejectsMissingMetadata(t *testing.T) {
+	n2 := newTestRaft(2, []uint64{1, 2})
+
+	msg := &raftpb.RaftMessage{
+		From: 1,
+		To:   2,
+		Term: 1,
+		Type: raftpb.MessageType_INSTALL_SNAPSHOT_REQ,
+		Body: &raftpb.RaftMessage_SnapReq{SnapReq: &raftpb.InstallSnapshotRequest{
+			Term:              1,
+			LeaderId:          1,
+			LastIncludedIndex: 1,
+			LastIncludedTerm:  1,
+			Data:              []byte{},
+		}},
+	}
+
+	require.NotPanics(t, func() { n2.step(msg) })
+	resps := readMessages(n2)
+	require.Len(t, resps, 1)
+	assert.False(t, resps[0].Body.(*raftpb.RaftMessage_SnapResp).SnapResp.Success)
+}
+
 // TestSnapshotTransfer 验证快照传输全流程：
 // Leader 日志压缩后，落后的 Follower 收到 INSTALL_SNAPSHOT_REQ，
 // 正确设置 pendingSnapshot，并返回 Success 响应，Leader 更新 Progress。

@@ -73,6 +73,9 @@ func (rn *RawNode) Propose(data []byte) error {
 }
 
 func (rn *RawNode) Step(m *raftpb.RaftMessage) error {
+	if m == nil {
+		return ErrStepNilMsg
+	}
 	if IsLocalMsg(m) {
 		return ErrStepLocalMsg
 	}
