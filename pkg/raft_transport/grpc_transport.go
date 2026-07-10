@@ -33,6 +33,8 @@ type RGTransport struct {
 
 	mu    sync.RWMutex
 	sends map[uint64]peerStream
+	// sendFailures 按 peer 记录连续发送失败次数，仅用于指数采样日志。
+	sendFailures map[uint64]uint64
 
 	grpcSrv *grpc.Server
 	ctx     context.Context
@@ -51,13 +53,14 @@ func New(cfg *Config) *RGTransport {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &RGTransport{
-		nodeID:    cfg.NodeID,
-		selfAddr:  cfg.SelfAddr,
-		peerAddrs: cfg.Peers,
-		recvCh:    make(chan *raftpb.RaftMessage, 512),
-		sends:     make(map[uint64]peerStream),
-		ctx:       ctx,
-		cancel:    cancel,
+		nodeID:       cfg.NodeID,
+		selfAddr:     cfg.SelfAddr,
+		peerAddrs:    cfg.Peers,
+		recvCh:       make(chan *raftpb.RaftMessage, 512),
+		sends:        make(map[uint64]peerStream),
+		sendFailures: make(map[uint64]uint64),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 }
 
@@ -111,9 +114,28 @@ func (t *RGTransport) Send(msg *raftpb.RaftMessage) error {
 	stream, ok := t.sends[msg.To]
 	t.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("transport: no active stream to peer %d", msg.To)
+		err := fmt.Errorf("transport: no active stream to peer %d", msg.To)
+		t.recordSendFailure(msg.To, err)
+		return err
 	}
-	return stream.Send(msg)
+	if err := stream.Send(msg); err != nil {
+		t.recordSendFailure(msg.To, err)
+		return err
+	}
+	t.mu.Lock()
+	delete(t.sendFailures, msg.To)
+	t.mu.Unlock()
+	return nil
+}
+
+func (t *RGTransport) recordSendFailure(peerID uint64, err error) {
+	t.mu.Lock()
+	t.sendFailures[peerID]++
+	cnt := t.sendFailures[peerID]
+	t.mu.Unlock()
+	if cnt&(cnt-1) == 0 { // 1、2、4、8…
+		log.Printf("raft_transport[%d]: send to peer %d failed (count=%d): %v", t.nodeID, peerID, cnt, err)
+	}
 }
 
 // 获取只读的接收通道
@@ -135,25 +157,40 @@ func (t *RGTransport) Stop() error {
 // 不断尝试连接到指定 peer，直到成功或上下文取消
 func (t *RGTransport) connectLoop(peerID uint64, addr string) {
 	backoff := time.Second
+	var failures uint64
 	for {
-		if err := t.establishStream(peerID, addr); err != nil {
+		established, err := t.establishStream(peerID, addr)
+		if err != nil {
+			select {
+			case <-t.ctx.Done():
+				return
+			default:
+			}
+			if established {
+				// 该 stream 曾成功建立；断线后的重连从新周期开始计数。
+				backoff = time.Second
+				failures = 0
+			}
+			failures++
+			if failures&(failures-1) == 0 { // 1、2、4、8…
+				log.Printf("raft_transport[%d]: peer %d stream unavailable (attempt=%d): %v; retry in %s", t.nodeID, peerID, failures, err, backoff)
+			}
 			select {
 			case <-t.ctx.Done():
 				return
 			case <-time.After(backoff):
-				if backoff < 30*time.Second {
-					backoff *= 2
-				}
+				backoff = min(backoff*2, 30*time.Second)
 			}
 			continue
 		}
 		backoff = time.Second
+		failures = 0
 	}
 }
 
 // 尝试建立到 peer 的 gRPC 连接并启动消息接收循环
 // 这个函数返回意味着流RPC已经结束，连接被关闭或发生错误
-func (t *RGTransport) establishStream(peerID uint64, addr string) error {
+func (t *RGTransport) establishStream(peerID uint64, addr string) (bool, error) {
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -163,26 +200,28 @@ func (t *RGTransport) establishStream(peerID uint64, addr string) error {
 		}),
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer conn.Close()
 
 	client := raftpb.NewRaftTransportClient(conn)
 	stream, err := client.StreamMessage(t.ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Handshake
-	if err := stream.Send(&raftpb.RaftMessage{From: t.nodeID, To: peerID}); err != nil {
-		return err
+	if err := stream.Send(&raftpb.RaftMessage{From: t.nodeID, To: peerID, Type: raftpb.MessageType_HANDSHAKE}); err != nil {
+		return false, err
 	}
 
 	t.mu.Lock()
 	t.sends[peerID] = stream
+	delete(t.sendFailures, peerID)
 	t.mu.Unlock()
+	log.Printf("raft_transport[%d]: stream to peer %d established (%s)", t.nodeID, peerID, addr)
 
-	return t.serveStream(peerID, stream) // 这里是 Client
+	return true, t.serveStream(peerID, stream) // 这里是 Client
 }
 
 // 通用接收函数，支持Client和Server
@@ -235,7 +274,9 @@ func (h *serverHandler) StreamMessage(stream grpc.BidiStreamingServer[raftpb.Raf
 
 	h.t.mu.Lock()
 	h.t.sends[peerID] = stream
+	delete(h.t.sendFailures, peerID)
 	h.t.mu.Unlock()
+	log.Printf("raft_transport[%d]: stream from peer %d established", h.t.nodeID, peerID)
 
 	// 进入接收循环
 	return h.t.serveStream(peerID, stream) // 这里是 Server

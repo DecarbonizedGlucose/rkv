@@ -68,9 +68,8 @@ type Node struct {
 
 	raftTerm atomic.Uint64
 
-	snapshotCount  uint64
-	tickInterval   time.Duration
-	sendErrCounter atomic.Uint64 // 发送失败计数，用于限流日志
+	snapshotCount uint64
+	tickInterval  time.Duration
 
 	ticker   *time.Ticker
 	stopOnce sync.Once
@@ -353,19 +352,12 @@ func (n *Node) appendEntries(rd *raft.Ready) error {
 	return n.storage.Append(rd.Entries)
 }
 
-// 将 Raft 消息通过 Transport 发出。
-// 发送失败对 Raft 协议可容忍（心跳会重发），但持续失败意味着连接断开，
-// 使用指数采样避免在重连期间刷屏：第 1、2、4、8… 次才打印。
+// 将已持久化的 Raft 消息交给 Transport。
+// 连接状态、失败统计和日志由 Transport 负责；
+// Raft 协议会在后续 tick 中重新生成需要重发的消息。
 func (n *Node) sendMessages(msgs []*raftpb.RaftMessage) {
 	for _, msg := range msgs {
-		if err := n.transport.Send(msg); err != nil {
-			cnt := n.sendErrCounter.Add(1)
-			if cnt&(cnt-1) == 0 { // 仅在 cnt 为 2 的幂时打印
-				log.Printf("raftstore: send message to node %d failed (count=%d): %v", msg.To, cnt, err)
-			}
-		} else {
-			n.sendErrCounter.Store(0) // 成功后重置，下次失败从 1 开始
-		}
+		_ = n.transport.Send(msg)
 	}
 }
 

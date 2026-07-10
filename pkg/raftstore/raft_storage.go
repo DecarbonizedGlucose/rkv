@@ -200,10 +200,8 @@ func (s *RaftStorage) LastIndex() (uint64, error) {
 	return lastIdx, nil
 }
 
-// FirstIndex 返回已持久化日志的最小索引。
-// 无快照也无 entry 时返回 0，此时调用方 newRaftLog 会做 uint64 下溢防护。
-// 有快照时返回 snapIdx+1（快照后的第一条日志），
-// newRaftLog 取 FirstIndex-1 作为 lastIncludedIndex，即 snapIdx。
+// FirstIndex 返回未进入快照的最小索引。若存在快照，返回快照最后索引 + 1。
+// 若无快照或无日志，返回最小可操作索引即 1。
 func (s *RaftStorage) FirstIndex() (uint64, error) {
 	firstIdx, err := s.firstEntryIndex()
 	if err != nil {
@@ -213,11 +211,7 @@ func (s *RaftStorage) FirstIndex() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	// 如果存在快照，最小索引 = 快照最后索引 + 1
-	if snapIdx > 0 && firstIdx < snapIdx+1 {
-		firstIdx = snapIdx + 1
-	}
-	return firstIdx, nil
+	return max(firstIdx, snapIdx+1), nil
 }
 
 // Snapshot 返回最近一次创建的快照。
