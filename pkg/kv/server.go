@@ -43,10 +43,17 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 		log.Println("KVServer: get request rejected, not leader")
 		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
-	ikv, err := s.stor.Get(req.Key, s.revMgr.Peek())
+	readRev := s.stor.MaxRevision()
+	if readRev == 0 {
+		return &kvpb.GetResponse{
+			Header: s.makeHeaderAt(readRev),
+			Count:  0,
+		}, nil
+	}
+	ikv, err := s.stor.Get(req.Key, readRev)
 	if err == storage.ErrKeyNotFound { // ikv == nil
 		return &kvpb.GetResponse{
-			Header: s.makeHeader(),
+			Header: s.makeHeaderAt(readRev),
 			Count:  0,
 		}, nil
 	} else if err != nil {
@@ -54,7 +61,7 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 	return &kvpb.GetResponse{
-		Header: s.makeHeader(),
+		Header: s.makeHeaderAt(readRev),
 		Kv:     ikv.ToProto(),
 		Count:  1,
 	}, nil
@@ -69,7 +76,13 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 	if len(end) == 0 {
 		end = nil
 	}
-	ikvs, more, err := s.stor.Range(req.RangeStart, end, int(req.Limit), nil, s.revMgr.Peek())
+	readRev := s.stor.MaxRevision()
+	if readRev == 0 {
+		return &kvpb.RangeResponse{
+			Header: s.makeHeaderAt(readRev),
+		}, nil
+	}
+	ikvs, more, err := s.stor.Range(req.RangeStart, end, int(req.Limit), nil, readRev)
 	if err != nil {
 		log.Printf("KVServer: range scan: %v", err)
 		return nil, status.Error(codes.Internal, "internal error")
@@ -79,7 +92,7 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 		kvs = append(kvs, ikv.ToProto())
 	}
 	return &kvpb.RangeResponse{
-		Header: s.makeHeader(),
+		Header: s.makeHeaderAt(readRev),
 		Kvs:    kvs,
 		Count:  int64(len(kvs)),
 		More:   more,
@@ -147,9 +160,13 @@ func (s *KVServer) isLeader(ctx context.Context) bool {
 }
 
 func (s *KVServer) makeHeader() *kvpb.ResponseHeader {
+	return s.makeHeaderAt(s.revMgr.Peek())
+}
+
+func (s *KVServer) makeHeaderAt(rev uint64) *kvpb.ResponseHeader {
 	return &kvpb.ResponseHeader{
 		MemberId: s.nodeID,
-		Revision: s.revMgr.Peek(),
+		Revision: rev,
 		RaftTerm: s.node.Term(),
 	}
 }

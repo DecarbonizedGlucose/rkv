@@ -82,6 +82,20 @@ func TestBadgerPutOverride(t *testing.T) {
 	assert.Equal(t, uint64(2), ikv.MRevision)
 }
 
+func TestBadgerGetAtRevision(t *testing.T) {
+	s, cleanup := testutil.NewTestStorage(t)
+	defer cleanup()
+
+	_, err := s.Put([]byte("k1"), []byte("v1"), 1, 0)
+	require.NoError(t, err)
+	_, err = s.Put([]byte("k1"), []byte("v2"), 2, 0)
+	require.NoError(t, err)
+
+	ikv, err := s.Get([]byte("k1"), 1)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("v1"), ikv.Value)
+}
+
 func TestBadgerPutGetMultipleKeys(t *testing.T) {
 	s, cleanup := testutil.NewTestStorage(t)
 	defer cleanup()

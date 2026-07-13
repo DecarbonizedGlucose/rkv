@@ -18,10 +18,12 @@ type BadgerStorage struct {
 	db *badger.DB
 }
 
-// Get 获取指定 key 在当前最新版本下的值。
-// rev 参数保留用于后续支持指定 revision 读取，当前固定读取最新版本。
+// Get 获取指定 key 在 rev 时的值。rev=0 表示当前最新版本。
 func (b *BadgerStorage) Get(key []byte, rev uint64) (ikv *util.InternalKV, err error) {
-	readTs := b.db.MaxVersion()
+	readTs := rev
+	if readTs == 0 {
+		readTs = b.db.MaxVersion()
+	}
 	txn := b.db.NewTransactionAt(readTs, false)
 	defer txn.Discard()
 
@@ -68,7 +70,10 @@ func (b *BadgerStorage) Delete(key []byte, rev uint64) (ikv *util.InternalKV, er
 // limit 控制返回条目数（0 = 无限制），fn 用于过滤，返回 false 则跳过该条目。
 // more 表示区间内仍有未返回的 key（因 limit 截断或迭代器未耗尽）。
 func (b *BadgerStorage) Range(start, end []byte, limit int, fn func(ikv *util.InternalKV) bool, rev uint64) (ikvs []*util.InternalKV, more bool, err error) {
-	readTs := b.db.MaxVersion()
+	readTs := rev
+	if readTs == 0 {
+		readTs = b.db.MaxVersion()
+	}
 	txn := b.db.NewTransactionAt(readTs, false)
 	defer txn.Discard()
 
