@@ -199,6 +199,45 @@ func TestFollowerStepdownOnHigherTerm(t *testing.T) {
 	assert.Equal(t, uint64(2), n1.hardState.Term)
 }
 
+func TestQuorumCheckIgnoresStaleRound(t *testing.T) {
+	leader := newTestRaft(1, []uint64{1, 2, 3})
+	follower := newTestRaft(2, []uint64{1, 2, 3})
+	leader.becomeCandidate()
+	leader.becomeLeader()
+	_ = readMessages(leader) // 丢弃当选时复制 no-op 的普通 Append
+
+	require.NoError(t, leader.checkQuorum(1))
+	round1 := readMessages(leader)
+	var staleResponse *raftpb.RaftMessage
+	for _, msg := range round1 {
+		if msg.To == follower.id {
+			require.NoError(t, follower.step(msg))
+			staleResponse = readMessages(follower)[0]
+			break
+		}
+	}
+	require.NotNil(t, staleResponse)
+
+	require.NoError(t, leader.checkQuorum(2))
+	round2 := readMessages(leader)
+	require.NoError(t, leader.step(staleResponse))
+	assert.Nil(t, leader.quorumConfirmed)
+
+	var current *raftpb.RaftMessage
+	for _, msg := range round2 {
+		if msg.To == follower.id {
+			require.NoError(t, follower.step(msg))
+			current = readMessages(follower)[0]
+			break
+		}
+	}
+	require.NotNil(t, current)
+	require.NoError(t, leader.step(current))
+	require.NotNil(t, leader.quorumConfirmed)
+	assert.Equal(t, uint64(2), leader.quorumConfirmed.Round)
+	assert.True(t, leader.raftLog.matchTerm(leader.hardState.CommitIndex, leader.hardState.Term))
+}
+
 // ========================================
 // Log Replication
 // ========================================

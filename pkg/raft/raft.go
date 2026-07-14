@@ -23,6 +23,11 @@ type Raft struct {
 
 	msgs []*raftpb.RaftMessage // 待发送的消息
 
+	quorumRound     uint64
+	quorumTerm      uint64
+	quorumAcks      map[uint64]struct{}
+	quorumConfirmed *QuorumConfirmation
+
 	electionTimeout           int
 	randomizedElectionTimeout int
 	electionElapsed           int
@@ -103,6 +108,7 @@ func (r *Raft) tick() {
 }
 
 func (r *Raft) becomeFollower(term, leader_id uint64) {
+	r.clearQuorumCheck()
 	r.state = stateFollower
 	r.leader_id = leader_id
 	r.electionElapsed = 0
@@ -114,6 +120,7 @@ func (r *Raft) becomeFollower(term, leader_id uint64) {
 }
 
 func (r *Raft) becomeCandidate() {
+	r.clearQuorumCheck()
 	r.state = stateCandidate
 	r.leader_id = 0
 	r.electionElapsed = 0
@@ -123,6 +130,7 @@ func (r *Raft) becomeCandidate() {
 }
 
 func (r *Raft) becomeLeader() {
+	r.clearQuorumCheck()
 	r.state = stateLeader
 	r.leader_id = r.id
 	r.electionElapsed = 0
@@ -214,12 +222,16 @@ func (r *Raft) send(m *raftpb.RaftMessage) {
 func (r *Raft) broadcastHeartbeat() {
 	for id := range r.prs {
 		if id != r.id {
-			r.sendAppend(id)
+			r.sendAppendWithRound(id, r.quorumRound)
 		}
 	}
 }
 
 func (r *Raft) sendAppend(to uint64) {
+	r.sendAppendWithRound(to, 0)
+}
+
+func (r *Raft) sendAppendWithRound(to, round uint64) {
 	pr := r.prs[to]
 
 	if pr.NextIndex <= r.raftLog.getLastIncluded() {
@@ -234,6 +246,7 @@ func (r *Raft) sendAppend(to uint64) {
 		PrevLogTerm:  r.raftLog.term(pr.NextIndex - 1),
 		Entries:      r.raftLog.slice(pr.NextIndex, r.raftLog.lastLogIndex()+1),
 		LeaderCommit: r.hardState.CommitIndex,
+		QuorumRound:  round,
 	}
 	msg := &raftpb.RaftMessage{
 		From: r.id,
@@ -250,8 +263,9 @@ func (r *Raft) sendAppend(to uint64) {
 func (r *Raft) handleAppend(m *raftpb.RaftMessage) {
 	req := m.Body.(*raftpb.RaftMessage_AppendReq).AppendReq
 	resp := &raftpb.AppendEntriesResponse{
-		Term:    r.hardState.Term,
-		Success: false,
+		Term:        r.hardState.Term,
+		Success:     false,
+		QuorumRound: req.QuorumRound,
 	}
 	msg := &raftpb.RaftMessage{
 		From: r.id,
@@ -337,6 +351,47 @@ func (r *Raft) handleAppendResponse(m *raftpb.RaftMessage) {
 	}
 
 	r.maybeCommit()
+	r.maybeConfirmQuorum(m.From, resp)
+}
+
+func (r *Raft) checkQuorum(round uint64) error {
+	if r.state != stateLeader {
+		return ErrNotLeader
+	}
+	r.quorumRound = round
+	r.quorumTerm = r.hardState.Term
+	r.quorumAcks = map[uint64]struct{}{r.id: {}}
+	r.quorumConfirmed = nil
+	r.broadcastHeartbeat()
+	r.maybeConfirmQuorum(0, nil)
+	return nil
+}
+
+func (r *Raft) maybeConfirmQuorum(from uint64, resp *raftpb.AppendEntriesResponse) {
+	if r.quorumRound == 0 || r.state != stateLeader || r.quorumTerm != r.hardState.Term {
+		return
+	}
+	if resp != nil {
+		if !resp.Success || resp.QuorumRound != r.quorumRound {
+			return
+		}
+		r.quorumAcks[from] = struct{}{}
+	}
+	if len(r.quorumAcks) < len(r.prs)/2+1 ||
+		!r.raftLog.matchTerm(r.hardState.CommitIndex, r.hardState.Term) {
+		return
+	}
+	r.quorumConfirmed = &QuorumConfirmation{Term: r.quorumTerm, Round: r.quorumRound}
+	r.quorumRound = 0
+	r.quorumTerm = 0
+	r.quorumAcks = nil
+}
+
+func (r *Raft) clearQuorumCheck() {
+	r.quorumRound = 0
+	r.quorumTerm = 0
+	r.quorumAcks = nil
+	r.quorumConfirmed = nil
 }
 
 func (r *Raft) startElection() {

@@ -1,6 +1,9 @@
 package raftstore
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -51,6 +54,21 @@ type proposal struct {
 	resultCh   chan []byte
 }
 
+type readRequest struct {
+	resultCh chan readPermitResult
+}
+
+type readPermitResult struct {
+	permit ReadPermit
+	err    error
+}
+
+// ReadPermit 证明节点在 ValidUntil 前以 Term 身份获得过多数派确认。
+type ReadPermit struct {
+	Term       uint64
+	ValidUntil time.Time
+}
+
 // Node 是单个 Raft 参与者的集成中枢，连接 RawNode、持久化存储、
 // 网络传输和状态机应用。
 type Node struct {
@@ -59,8 +77,17 @@ type Node struct {
 	transport raft_transport.Transport
 	sm        StateMachine
 
-	propCh  chan *proposal
-	pending map[uint64]*proposal // proposalID -> proposal，记录已提交但未完成的提案
+	propCh        chan *proposal
+	pending       map[uint64]*proposal // proposalID -> proposal，记录已提交但未完成的提案
+	readCh        chan *readRequest
+	readWaiters   []*readRequest
+	readRound     uint64
+	confirmRound  uint64
+	confirmTerm   uint64
+	confirmUntil  time.Time
+	leaseTerm     uint64
+	leaseUntil    time.Time
+	leaseDuration time.Duration
 
 	// 从 Ready.SoftState 中提取，通过 LeaderID() 对外暴露。
 	leaderID atomic.Uint64
@@ -136,17 +163,31 @@ func NewNode(cfg *Config) (*Node, error) {
 		sm:            cfg.StateMachine,
 		propCh:        make(chan *proposal, 256),
 		pending:       make(map[uint64]*proposal),
+		readCh:        make(chan *readRequest, 256),
+		readRound:     initialReadRound(),
 		myID:          cfg.RaftConfig.ID,
 		snapshotCount: snapCount,
 		tickInterval:  tickInterval,
+		leaseDuration: time.Duration(cfg.RaftConfig.ElectionTimeout) * tickInterval / 2,
 		ticker:        time.NewTicker(tickInterval),
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 		fatalCh:       make(chan struct{}),
 	}
+	n.raftTerm.Store(rn.Term())
 
 	go n.run()
 	return n, nil
+}
+
+func initialReadRound() uint64 {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		if round := binary.LittleEndian.Uint64(b[:]); round != 0 {
+			return round
+		}
+	}
+	return uint64(time.Now().UnixNano())
 }
 
 // 将数据提交到 Raft 日志中，直到日志被应用返回。
@@ -194,6 +235,31 @@ func (n *Node) LeaderID() uint64 {
 
 func (n *Node) Term() uint64 {
 	return n.raftTerm.Load()
+}
+
+// AcquireReadPermit 在当前 Leader 的 lease 内返回读许可；lease 失效时会先发起一次多数派确认。
+func (n *Node) AcquireReadPermit(ctx context.Context) (ReadPermit, error) {
+	r := &readRequest{resultCh: make(chan readPermitResult, 1)}
+	select {
+	case n.readCh <- r:
+	case <-ctx.Done():
+		return ReadPermit{}, ctx.Err()
+	case <-n.stopCh:
+		return ReadPermit{}, ErrStopped
+	}
+	select {
+	case result := <-r.resultCh:
+		return result.permit, result.err
+	case <-ctx.Done():
+		return ReadPermit{}, ctx.Err()
+	case <-n.stopCh:
+		return ReadPermit{}, ErrStopped
+	}
+}
+
+// ValidateReadPermit 用于在固定存储 revision 后确认许可没有过期或跨 term。
+func (n *Node) ValidateReadPermit(p ReadPermit) bool {
+	return p.Term != 0 && n.IsLeader() && n.Term() == p.Term && time.Now().Before(p.ValidUntil)
 }
 
 // 关闭节点，丢弃所有未完成的提案。可重复调用。
@@ -252,10 +318,13 @@ func (n *Node) run() {
 			if err == nil {
 				n.pending[p.proposalID] = p
 			}
+		case r := <-n.readCh:
+			n.handleReadRequest(r)
 		case <-n.stopCh:
 			return
 		}
 
+		n.expireQuorumCheck()
 		if !n.rn.HasReady() {
 			continue
 		}
@@ -306,6 +375,7 @@ func (n *Node) processReady() error {
 	n.updateLeader(&rd)
 
 	n.rn.Advance(&rd)
+	n.finishQuorumCheck(&rd)
 
 	for _, r := range results {
 		if p, ok := n.pending[r.ProposalID]; ok {
@@ -314,6 +384,78 @@ func (n *Node) processReady() error {
 		}
 	}
 	return nil
+}
+
+func (n *Node) handleReadRequest(r *readRequest) {
+	now := time.Now()
+	term := n.rn.Term()
+	if !n.rn.IsLeader() {
+		r.resultCh <- readPermitResult{err: ErrNotLeader}
+		return
+	}
+	if n.leaseTerm == term && now.Before(n.leaseUntil) {
+		r.resultCh <- readPermitResult{permit: ReadPermit{Term: term, ValidUntil: n.leaseUntil}}
+		return
+	}
+	n.readWaiters = append(n.readWaiters, r)
+	if n.confirmRound != 0 {
+		return
+	}
+	n.readRound++
+	if n.readRound == 0 {
+		n.readRound++
+	}
+	n.confirmRound = n.readRound
+	n.confirmTerm = term
+	n.confirmUntil = now.Add(n.leaseDuration)
+	if err := n.rn.CheckQuorum(n.confirmRound); err != nil {
+		n.failReadWaiters(ErrNotLeader)
+	}
+}
+
+func (n *Node) finishQuorumCheck(rd *raft.Ready) {
+	if !n.rn.IsLeader() || (n.confirmRound != 0 && n.rn.Term() != n.confirmTerm) {
+		n.leaseTerm = 0
+		n.leaseUntil = time.Time{}
+		n.failReadWaiters(ErrNotLeader)
+		return
+	}
+	confirmed := rd.QuorumConfirmed
+	if confirmed == nil || confirmed.Round != n.confirmRound || confirmed.Term != n.confirmTerm {
+		return
+	}
+	if !time.Now().Before(n.confirmUntil) {
+		n.failReadWaiters(ErrQuorumTimeout)
+		return
+	}
+	n.leaseTerm = confirmed.Term
+	n.leaseUntil = n.confirmUntil
+	permit := ReadPermit{Term: n.leaseTerm, ValidUntil: n.leaseUntil}
+	for _, r := range n.readWaiters {
+		r.resultCh <- readPermitResult{permit: permit}
+	}
+	n.readWaiters = nil
+	n.clearQuorumCheck()
+}
+
+func (n *Node) expireQuorumCheck() {
+	if n.confirmRound != 0 && !time.Now().Before(n.confirmUntil) {
+		n.failReadWaiters(ErrQuorumTimeout)
+	}
+}
+
+func (n *Node) failReadWaiters(err error) {
+	for _, r := range n.readWaiters {
+		r.resultCh <- readPermitResult{err: err}
+	}
+	n.readWaiters = nil
+	n.clearQuorumCheck()
+}
+
+func (n *Node) clearQuorumCheck() {
+	n.confirmRound = 0
+	n.confirmTerm = 0
+	n.confirmUntil = time.Time{}
 }
 
 // 将快照写入存储并恢复状态机，Follower 侧收到快照时触发。

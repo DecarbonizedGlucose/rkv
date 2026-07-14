@@ -125,6 +125,17 @@ func TestNodeStartAndBecomeLeader(t *testing.T) {
 	assert.Equal(t, []byte{0}, result)
 }
 
+func TestNodeAcquireReadPermit(t *testing.T) {
+	n, _, _, cleanup := newTestNode(t, 1, []uint64{1})
+	defer cleanup()
+
+	require.Eventually(t, n.IsLeader, 2*time.Second, 10*time.Millisecond)
+	permit, err := n.AcquireReadPermit(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, n.Term(), permit.Term)
+	assert.True(t, n.ValidateReadPermit(permit))
+}
+
 func TestNodeProposeAndApply(t *testing.T) {
 	n, _, sm, cleanup := newTestNode(t, 1, []uint64{1})
 	defer cleanup()

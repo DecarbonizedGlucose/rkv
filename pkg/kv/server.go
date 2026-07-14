@@ -2,6 +2,7 @@ package kv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -43,7 +44,10 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 		log.Println("KVServer: get request rejected, not leader")
 		return nil, status.Error(codes.FailedPrecondition, "not leader")
 	}
-	readRev := s.stor.MaxRevision()
+	readRev, err := s.acquireReadRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if readRev == 0 {
 		return &kvpb.GetResponse{
 			Header: s.makeHeaderAt(readRev),
@@ -76,7 +80,10 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 	if len(end) == 0 {
 		end = nil
 	}
-	readRev := s.stor.MaxRevision()
+	readRev, err := s.acquireReadRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if readRev == 0 {
 		return &kvpb.RangeResponse{
 			Header: s.makeHeaderAt(readRev),
@@ -157,6 +164,26 @@ func (s *KVServer) isLeader(ctx context.Context) bool {
 	}
 	grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
 	return false
+}
+
+func (s *KVServer) acquireReadRevision(ctx context.Context) (uint64, error) {
+	for {
+		permit, err := s.node.AcquireReadPermit(ctx)
+		if err != nil {
+			if errors.Is(err, raftstore.ErrNotLeader) {
+				grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
+				return 0, status.Error(codes.FailedPrecondition, "not leader")
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return 0, status.FromContextError(err).Err()
+			}
+			return 0, status.Error(codes.Unavailable, "leader quorum unavailable")
+		}
+		readRev := s.stor.MaxRevision()
+		if s.node.ValidateReadPermit(permit) {
+			return readRev, nil
+		}
+	}
 }
 
 func (s *KVServer) makeHeader() *kvpb.ResponseHeader {

@@ -90,6 +90,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 		Transport:     transport,
 		StateMachine:  sm,
 		SnapshotCount: o.SnapshotCount,
+		TickInterval:  o.TickInterval,
 	}
 
 	node, err := raftstore.NewNode(rsConfig) // source 3

@@ -356,6 +356,7 @@ type AppendEntriesRequest struct {
 	PrevLogTerm   uint64                 `protobuf:"varint,4,opt,name=prev_log_term,json=prevLogTerm,proto3" json:"prev_log_term,omitempty"`
 	Entries       []*Entry               `protobuf:"bytes,5,rep,name=entries,proto3" json:"entries,omitempty"`
 	LeaderCommit  uint64                 `protobuf:"varint,6,opt,name=leader_commit,json=leaderCommit,proto3" json:"leader_commit,omitempty"`
+	QuorumRound   uint64                 `protobuf:"varint,7,opt,name=quorum_round,json=quorumRound,proto3" json:"quorum_round,omitempty"` // 只用于关联一次 Leader quorum 确认，不持久化
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,6 +433,13 @@ func (x *AppendEntriesRequest) GetLeaderCommit() uint64 {
 	return 0
 }
 
+func (x *AppendEntriesRequest) GetQuorumRound() uint64 {
+	if x != nil {
+		return x.QuorumRound
+	}
+	return 0
+}
+
 type AppendEntriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Term          uint64                 `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
@@ -439,6 +447,7 @@ type AppendEntriesResponse struct {
 	ConflictIndex uint64                 `protobuf:"varint,3,opt,name=conflict_index,json=conflictIndex,proto3" json:"conflict_index,omitempty"`
 	ConflictTerm  uint64                 `protobuf:"varint,4,opt,name=conflict_term,json=conflictTerm,proto3" json:"conflict_term,omitempty"`
 	LastLogIndex  uint64                 `protobuf:"varint,5,opt,name=last_log_index,json=lastLogIndex,proto3" json:"last_log_index,omitempty"`
+	QuorumRound   uint64                 `protobuf:"varint,6,opt,name=quorum_round,json=quorumRound,proto3" json:"quorum_round,omitempty"` // 回显请求中的 quorum_round
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -504,6 +513,13 @@ func (x *AppendEntriesResponse) GetConflictTerm() uint64 {
 func (x *AppendEntriesResponse) GetLastLogIndex() uint64 {
 	if x != nil {
 		return x.LastLogIndex
+	}
+	return 0
+}
+
+func (x *AppendEntriesResponse) GetQuorumRound() uint64 {
+	if x != nil {
+		return x.QuorumRound
 	}
 	return 0
 }
@@ -1045,20 +1061,22 @@ const file_raft_proto_rawDesc = "" +
 	"\bsnap_req\x18\x0e \x01(\v2\x1e.raftpb.InstallSnapshotRequestH\x00R\asnapReq\x12>\n" +
 	"\tsnap_resp\x18\x0f \x01(\v2\x1f.raftpb.InstallSnapshotResponseH\x00R\bsnapResp\x12)\n" +
 	"\apropose\x18\x10 \x01(\v2\r.raftpb.EntryH\x00R\aproposeB\x06\n" +
-	"\x04body\"\xdf\x01\n" +
+	"\x04body\"\x82\x02\n" +
 	"\x14AppendEntriesRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\x04R\bleaderId\x12$\n" +
 	"\x0eprev_log_index\x18\x03 \x01(\x04R\fprevLogIndex\x12\"\n" +
 	"\rprev_log_term\x18\x04 \x01(\x04R\vprevLogTerm\x12'\n" +
 	"\aentries\x18\x05 \x03(\v2\r.raftpb.EntryR\aentries\x12#\n" +
-	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\"\xb7\x01\n" +
+	"\rleader_commit\x18\x06 \x01(\x04R\fleaderCommit\x12!\n" +
+	"\fquorum_round\x18\a \x01(\x04R\vquorumRound\"\xda\x01\n" +
 	"\x15AppendEntriesResponse\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12%\n" +
 	"\x0econflict_index\x18\x03 \x01(\x04R\rconflictIndex\x12#\n" +
 	"\rconflict_term\x18\x04 \x01(\x04R\fconflictTerm\x12$\n" +
-	"\x0elast_log_index\x18\x05 \x01(\x04R\flastLogIndex\"\x95\x01\n" +
+	"\x0elast_log_index\x18\x05 \x01(\x04R\flastLogIndex\x12!\n" +
+	"\fquorum_round\x18\x06 \x01(\x04R\vquorumRound\"\x95\x01\n" +
 	"\x12RequestVoteRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\x04R\x04term\x12!\n" +
 	"\fcandidate_id\x18\x02 \x01(\x04R\vcandidateId\x12$\n" +

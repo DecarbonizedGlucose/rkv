@@ -11,6 +11,11 @@ type SoftState struct {
 	RaftState stateType // 当前节点角色：Follower / Candidate / Leader
 }
 
+type QuorumConfirmation struct {
+	Term  uint64
+	Round uint64
+}
+
 type Ready struct {
 	*SoftState                             // 角色变化时才非 nil
 	HardState        *raftpb.HardState     // term、vote、commit，变化时才非 nil
@@ -18,6 +23,7 @@ type Ready struct {
 	Snapshot         *raftpb.Snapshot      // Follower 待应用的快照，非 nil 时优先处理
 	CommittedEntries []*raftpb.Entry       // 已提交、待应用到状态机的日志条目
 	Messages         []*raftpb.RaftMessage // 待发送给其他节点的 Raft 消息
+	QuorumConfirmed  *QuorumConfirmation   // 本 term 的指定确认轮次已获多数派响应
 }
 
 type PrevState struct {
@@ -72,6 +78,18 @@ func (rn *RawNode) Propose(data []byte) error {
 	return rn.Raft.step(msg)
 }
 
+func (rn *RawNode) CheckQuorum(round uint64) error {
+	return rn.Raft.checkQuorum(round)
+}
+
+func (rn *RawNode) IsLeader() bool {
+	return rn.Raft.state == stateLeader
+}
+
+func (rn *RawNode) Term() uint64 {
+	return rn.Raft.hardState.Term
+}
+
 func (rn *RawNode) Step(m *raftpb.RaftMessage) error {
 	if m == nil {
 		return ErrStepNilMsg
@@ -115,6 +133,7 @@ func (rn *RawNode) Ready() Ready {
 		Snapshot:         rn.Raft.raftLog.pendingSnapshot,
 		CommittedEntries: rn.Raft.raftLog.nextEntries(rn.Raft.hardState.CommitIndex),
 		Messages:         msg,
+		QuorumConfirmed:  rn.Raft.quorumConfirmed,
 	}
 	return rd
 }
@@ -139,6 +158,7 @@ func (rn *RawNode) HasReady() bool {
 	return len(rn.Raft.msgs) > 0 ||
 		len(rn.Raft.raftLog.unstableEntries()) > 0 ||
 		len(rn.Raft.raftLog.nextEntries(rn.Raft.hardState.CommitIndex)) > 0 ||
+		rn.Raft.quorumConfirmed != nil ||
 		rn.Raft.raftLog.pendingSnapshot != nil
 }
 
@@ -153,6 +173,9 @@ func (rn *RawNode) Advance(rd *Ready) {
 		rn.Raft.raftLog.pendingSnapshot = nil
 	}
 	rn.Raft.clearMsgs()
+	if rd.QuorumConfirmed != nil && rn.Raft.quorumConfirmed == rd.QuorumConfirmed {
+		rn.Raft.quorumConfirmed = nil
+	}
 	if rd.SoftState != nil {
 		rn.PrevSoftState = SoftStateCopy(rd.SoftState)
 	}
