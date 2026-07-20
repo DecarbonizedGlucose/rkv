@@ -12,8 +12,16 @@ type SoftState struct {
 }
 
 type QuorumConfirmation struct {
-	Term  uint64
-	Round uint64
+	RequestID uint64
+	Term      uint64
+	Round     uint64
+	Rejected  bool
+}
+
+type ReadState struct {
+	RequestID uint64
+	Index     uint64
+	Rejected  bool
 }
 
 type Ready struct {
@@ -23,7 +31,8 @@ type Ready struct {
 	Snapshot         *raftpb.Snapshot      // Follower 待应用的快照，非 nil 时优先处理
 	CommittedEntries []*raftpb.Entry       // 已提交、待应用到状态机的日志条目
 	Messages         []*raftpb.RaftMessage // 待发送给其他节点的 Raft 消息
-	QuorumConfirmed  *QuorumConfirmation   // 本 term 的指定确认轮次已获多数派响应
+	QuorumConfirmed  []QuorumConfirmation  // 本 term 的本地 quorum consumer 完成事件
+	ReadStates       []ReadState           // ReadIndex 响应，由集成层等待 apply
 }
 
 type PrevState struct {
@@ -78,8 +87,12 @@ func (rn *RawNode) Propose(data []byte) error {
 	return rn.Raft.step(msg)
 }
 
-func (rn *RawNode) CheckQuorum(round uint64) error {
-	return rn.Raft.checkQuorum(round)
+func (rn *RawNode) CheckQuorum(requestID uint64) error {
+	return rn.Raft.checkQuorum(requestID)
+}
+
+func (rn *RawNode) ReadIndex(requestID uint64) error {
+	return rn.Raft.requestReadIndex(requestID)
 }
 
 func (rn *RawNode) IsLeader() bool {
@@ -134,6 +147,7 @@ func (rn *RawNode) Ready() Ready {
 		CommittedEntries: rn.Raft.raftLog.nextEntries(rn.Raft.hardState.CommitIndex),
 		Messages:         msg,
 		QuorumConfirmed:  rn.Raft.quorumConfirmed,
+		ReadStates:       rn.Raft.readStates,
 	}
 	return rd
 }
@@ -158,7 +172,8 @@ func (rn *RawNode) HasReady() bool {
 	return len(rn.Raft.msgs) > 0 ||
 		len(rn.Raft.raftLog.unstableEntries()) > 0 ||
 		len(rn.Raft.raftLog.nextEntries(rn.Raft.hardState.CommitIndex)) > 0 ||
-		rn.Raft.quorumConfirmed != nil ||
+		len(rn.Raft.quorumConfirmed) > 0 ||
+		len(rn.Raft.readStates) > 0 ||
 		rn.Raft.raftLog.pendingSnapshot != nil
 }
 
@@ -173,8 +188,11 @@ func (rn *RawNode) Advance(rd *Ready) {
 		rn.Raft.raftLog.pendingSnapshot = nil
 	}
 	rn.Raft.clearMsgs()
-	if rd.QuorumConfirmed != nil && rn.Raft.quorumConfirmed == rd.QuorumConfirmed {
+	if len(rd.QuorumConfirmed) > 0 {
 		rn.Raft.quorumConfirmed = nil
+	}
+	if len(rd.ReadStates) > 0 {
+		rn.Raft.readStates = nil
 	}
 	if rd.SoftState != nil {
 		rn.PrevSoftState = SoftStateCopy(rd.SoftState)
@@ -183,6 +201,11 @@ func (rn *RawNode) Advance(rd *Ready) {
 		rn.PrevHardState = proto.Clone(rd.HardState).(*raftpb.HardState)
 	}
 	rn.Raft.raftLog.maybeCompact()
+	rn.Raft.maybeStartQueuedQuorum()
+}
+
+func (rn *RawNode) AppliedIndex() uint64 {
+	return rn.Raft.raftLog.appliedIndex
 }
 
 func (rn *RawNode) GetProgress() map[uint64]Progress {

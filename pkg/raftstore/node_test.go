@@ -1,6 +1,7 @@
 package raftstore_test
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -21,16 +22,26 @@ import (
 
 type mockTransport struct {
 	recvCh chan *raftpb.RaftMessage
+	sentCh chan *raftpb.RaftMessage
 }
 
 func newMockTransport() *mockTransport {
-	return &mockTransport{recvCh: make(chan *raftpb.RaftMessage, 16)}
+	return &mockTransport{
+		recvCh: make(chan *raftpb.RaftMessage, 16),
+		sentCh: make(chan *raftpb.RaftMessage, 64),
+	}
 }
 
-func (m *mockTransport) Send(msg *raftpb.RaftMessage) error { return nil }
-func (m *mockTransport) Recv() <-chan *raftpb.RaftMessage   { return m.recvCh }
-func (m *mockTransport) Start() error                       { return nil }
-func (m *mockTransport) Stop() error                        { return nil }
+func (m *mockTransport) Send(msg *raftpb.RaftMessage) error {
+	select {
+	case m.sentCh <- msg:
+	default:
+	}
+	return nil
+}
+func (m *mockTransport) Recv() <-chan *raftpb.RaftMessage { return m.recvCh }
+func (m *mockTransport) Start() error                     { return nil }
+func (m *mockTransport) Stop() error                      { return nil }
 
 var _ raft_transport.Transport = (*mockTransport)(nil)
 
@@ -77,6 +88,10 @@ func (sm *mockStateMachine) appliedData() [][]byte {
 
 // newTestNode 创建一个单节点用于测试，Transport 为 mock。
 func newTestNode(t *testing.T, id uint64, peers []uint64) (*raftstore.Node, *mockTransport, *mockStateMachine, func()) {
+	return newTestNodeWithTick(t, id, peers, 10*time.Millisecond)
+}
+
+func newTestNodeWithTick(t *testing.T, id uint64, peers []uint64, tick time.Duration) (*raftstore.Node, *mockTransport, *mockStateMachine, func()) {
 	t.Helper()
 
 	storage := raft.NewMemoryStorage()
@@ -96,7 +111,7 @@ func newTestNode(t *testing.T, id uint64, peers []uint64) (*raftstore.Node, *moc
 		Storage:      newWrappedStorage(storage),
 		Transport:    tr,
 		StateMachine: sm,
-		TickInterval: 10 * time.Millisecond,
+		TickInterval: tick,
 	}
 
 	n, err := raftstore.NewNode(cfg)
@@ -106,6 +121,23 @@ func newTestNode(t *testing.T, id uint64, peers []uint64) (*raftstore.Node, *moc
 		n.Stop()
 	}
 	return n, tr, sm, cleanup
+}
+
+func waitSentMessage(t *testing.T, tr *mockTransport, timeout time.Duration, match func(*raftpb.RaftMessage) bool) *raftpb.RaftMessage {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case msg := <-tr.sentCh:
+			if match(msg) {
+				return msg
+			}
+		case <-timer.C:
+			t.Fatal("timed out waiting for Raft message")
+			return nil
+		}
+	}
 }
 
 // ========================================
@@ -134,6 +166,154 @@ func TestNodeAcquireReadPermit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, n.Term(), permit.Term)
 	assert.True(t, n.ValidateReadPermit(permit))
+}
+
+func TestNodeReadIndexWaitsUntilApplied(t *testing.T) {
+	n, tr, _, cleanup := newTestNode(t, 2, []uint64{1, 2, 3})
+	defer cleanup()
+
+	// 日志 2 已接收，但 Leader 只公布提交到 1。
+	tr.recvCh <- &raftpb.RaftMessage{
+		From: 1, To: 2, Term: 1, Type: raftpb.MessageType_APPEND_REQ,
+		Body: &raftpb.RaftMessage_AppendReq{AppendReq: &raftpb.AppendEntriesRequest{
+			Term: 1, LeaderId: 1, Entries: []*raftpb.Entry{
+				{Index: 1, Term: 1},
+				{Index: 2, Term: 1, Data: []byte("value")},
+			}, LeaderCommit: 1,
+		}},
+	}
+	require.Eventually(t, func() bool { return n.LeaderID() == 1 }, time.Second, 10*time.Millisecond)
+
+	resultCh := make(chan struct {
+		index uint64
+		err   error
+	}, 1)
+	go func() {
+		index, err := n.ReadIndex(t.Context())
+		resultCh <- struct {
+			index uint64
+			err   error
+		}{index: index, err: err}
+	}()
+
+	var requestID uint64
+	require.Eventually(t, func() bool {
+		select {
+		case msg := <-tr.sentCh:
+			if msg.Type == raftpb.MessageType_READ_INDEX_REQ {
+				requestID = msg.GetReadIndexReq().RequestId
+				return true
+			}
+		default:
+		}
+		return false
+	}, time.Second, 10*time.Millisecond)
+
+	tr.recvCh <- &raftpb.RaftMessage{
+		From: 1, To: 2, Term: 1, Type: raftpb.MessageType_READ_INDEX_RESP,
+		Body: &raftpb.RaftMessage_ReadIndexResp{ReadIndexResp: &raftpb.ReadIndexResponse{
+			RequestId: requestID, ReadIndex: 2, Success: true,
+		}},
+	}
+	select {
+	case <-resultCh:
+		t.Fatal("ReadIndex returned before index 2 was applied")
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	// Leader 公布 commit=2；Node apply 完 index 2 后才释放等待者。
+	tr.recvCh <- &raftpb.RaftMessage{
+		From: 1, To: 2, Term: 1, Type: raftpb.MessageType_APPEND_REQ,
+		Body: &raftpb.RaftMessage_AppendReq{AppendReq: &raftpb.AppendEntriesRequest{
+			Term: 1, LeaderId: 1, PrevLogIndex: 2, PrevLogTerm: 1, LeaderCommit: 2,
+		}},
+	}
+	select {
+	case result := <-resultCh:
+		require.NoError(t, result.err)
+		assert.Equal(t, uint64(2), result.index)
+	case <-time.After(time.Second):
+		t.Fatal("ReadIndex did not return after index 2 was applied")
+	}
+}
+
+func TestLeaderReadPermitIsNotStarvedByFollowerReadIndex(t *testing.T) {
+	n, tr, _, cleanup := newTestNodeWithTick(t, 1, []uint64{1, 2, 3}, 100*time.Millisecond)
+	defer cleanup()
+
+	vote := waitSentMessage(t, tr, 3*time.Second, func(msg *raftpb.RaftMessage) bool {
+		return msg.Type == raftpb.MessageType_REQUEST_VOTE_REQ && msg.To == 2
+	})
+	tr.recvCh <- &raftpb.RaftMessage{
+		From: 2, To: 1, Term: vote.Term, Type: raftpb.MessageType_REQUEST_VOTE_RESP,
+		Body: &raftpb.RaftMessage_VoteResp{VoteResp: &raftpb.RequestVoteResponse{
+			Term: vote.Term, VoteGranted: true, VoterId: 2,
+		}},
+	}
+	require.Eventually(t, n.IsLeader, time.Second, 10*time.Millisecond)
+
+	// 先复制并提交新 Leader 的当前 term no-op。
+	noOp := waitSentMessage(t, tr, time.Second, func(msg *raftpb.RaftMessage) bool {
+		return msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == 2 && len(msg.GetAppendReq().Entries) > 0
+	})
+	tr.recvCh <- appendSuccess(noOp, 2, 1)
+
+	// round 1 由 Follower ReadIndex 占用。
+	tr.recvCh <- readIndexRequestMessage(2, 1, vote.Term, 1)
+	round1 := waitSentMessage(t, tr, time.Second, func(msg *raftpb.RaftMessage) bool {
+		return msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == 2 && msg.GetAppendReq().QuorumRound != 0
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	permitCh := make(chan struct {
+		permit raftstore.ReadPermit
+		err    error
+	}, 1)
+	go func() {
+		permit, err := n.AcquireReadPermit(ctx)
+		permitCh <- struct {
+			permit raftstore.ReadPermit
+			err    error
+		}{permit: permit, err: err}
+	}()
+	time.Sleep(20 * time.Millisecond) // 等 Node.run 将本地 Lease consumer 登记进下一批
+
+	// 持续流量进入下一批；Leader Lease consumer 也已经登记在同一批。
+	tr.recvCh <- readIndexRequestMessage(2, 1, vote.Term, 2)
+	tr.recvCh <- appendSuccess(round1, 2, 1)
+	round2 := waitSentMessage(t, tr, time.Second, func(msg *raftpb.RaftMessage) bool {
+		return msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == 2 &&
+			msg.GetAppendReq().QuorumRound != 0 && msg.GetAppendReq().QuorumRound != round1.GetAppendReq().QuorumRound
+	})
+	tr.recvCh <- readIndexRequestMessage(2, 1, vote.Term, 3)
+	tr.recvCh <- appendSuccess(round2, 2, 1)
+
+	select {
+	case result := <-permitCh:
+		require.NoError(t, result.err)
+		assert.True(t, n.ValidateReadPermit(result.permit))
+	case <-time.After(time.Second):
+		t.Fatal("Leader read permit was starved by Follower ReadIndex traffic")
+	}
+}
+
+func appendSuccess(request *raftpb.RaftMessage, from, to uint64) *raftpb.RaftMessage {
+	req := request.GetAppendReq()
+	return &raftpb.RaftMessage{
+		From: from, To: to, Term: request.Term, Type: raftpb.MessageType_APPEND_RESP,
+		Body: &raftpb.RaftMessage_AppendResp{AppendResp: &raftpb.AppendEntriesResponse{
+			Term: req.Term, Success: true, LastLogIndex: req.PrevLogIndex + uint64(len(req.Entries)),
+			QuorumRound: req.QuorumRound,
+		}},
+	}
+}
+
+func readIndexRequestMessage(from, to, term, requestID uint64) *raftpb.RaftMessage {
+	return &raftpb.RaftMessage{
+		From: from, To: to, Term: term, Type: raftpb.MessageType_READ_INDEX_REQ,
+		Body: &raftpb.RaftMessage_ReadIndexReq{ReadIndexReq: &raftpb.ReadIndexRequest{RequestId: requestID}},
+	}
 }
 
 func TestNodeProposeAndApply(t *testing.T) {

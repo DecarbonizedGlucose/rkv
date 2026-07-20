@@ -63,6 +63,21 @@ type readPermitResult struct {
 	err    error
 }
 
+type readIndexRequest struct {
+	resultCh chan readIndexResult
+}
+
+type readIndexResult struct {
+	index uint64
+	err   error
+}
+
+type pendingReadIndex struct {
+	request  *readIndexRequest
+	index    uint64
+	deadline time.Time
+}
+
 // ReadPermit 证明节点在 ValidUntil 前以 Term 身份获得过多数派确认。
 type ReadPermit struct {
 	Term       uint64
@@ -77,17 +92,20 @@ type Node struct {
 	transport raft_transport.Transport
 	sm        StateMachine
 
-	propCh        chan *proposal
-	pending       map[uint64]*proposal // proposalID -> proposal，记录已提交但未完成的提案
-	readCh        chan *readRequest
-	readWaiters   []*readRequest
-	readRound     uint64
-	confirmRound  uint64
-	confirmTerm   uint64
-	confirmUntil  time.Time
-	leaseTerm     uint64
-	leaseUntil    time.Time
-	leaseDuration time.Duration
+	propCh           chan *proposal
+	pending          map[uint64]*proposal // proposalID -> proposal，记录已提交但未完成的提案
+	readCh           chan *readRequest
+	readWaiters      []*readRequest
+	readRound        uint64
+	confirmRequestID uint64
+	confirmTerm      uint64
+	confirmUntil     time.Time
+	leaseTerm        uint64
+	leaseUntil       time.Time
+	leaseDuration    time.Duration
+	readIndexCh      chan *readIndexRequest
+	pendingReadIndex map[uint64]*pendingReadIndex
+	readIndexTimeout time.Duration
 
 	// 从 Ready.SoftState 中提取，通过 LeaderID() 对外暴露。
 	leaderID atomic.Uint64
@@ -157,22 +175,25 @@ func NewNode(cfg *Config) (*Node, error) {
 	}
 
 	n := &Node{
-		rn:            rn,
-		storage:       cfg.Storage,
-		transport:     cfg.Transport,
-		sm:            cfg.StateMachine,
-		propCh:        make(chan *proposal, 256),
-		pending:       make(map[uint64]*proposal),
-		readCh:        make(chan *readRequest, 256),
-		readRound:     initialReadRound(),
-		myID:          cfg.RaftConfig.ID,
-		snapshotCount: snapCount,
-		tickInterval:  tickInterval,
-		leaseDuration: time.Duration(cfg.RaftConfig.ElectionTimeout) * tickInterval / 2,
-		ticker:        time.NewTicker(tickInterval),
-		stopCh:        make(chan struct{}),
-		doneCh:        make(chan struct{}),
-		fatalCh:       make(chan struct{}),
+		rn:               rn,
+		storage:          cfg.Storage,
+		transport:        cfg.Transport,
+		sm:               cfg.StateMachine,
+		propCh:           make(chan *proposal, 256),
+		pending:          make(map[uint64]*proposal),
+		readCh:           make(chan *readRequest, 256),
+		readRound:        initialReadRound(),
+		myID:             cfg.RaftConfig.ID,
+		snapshotCount:    snapCount,
+		tickInterval:     tickInterval,
+		leaseDuration:    time.Duration(cfg.RaftConfig.ElectionTimeout) * tickInterval / 2,
+		readIndexCh:      make(chan *readIndexRequest, 256),
+		pendingReadIndex: make(map[uint64]*pendingReadIndex),
+		readIndexTimeout: time.Duration(cfg.RaftConfig.ElectionTimeout) * tickInterval,
+		ticker:           time.NewTicker(tickInterval),
+		stopCh:           make(chan struct{}),
+		doneCh:           make(chan struct{}),
+		fatalCh:          make(chan struct{}),
 	}
 	n.raftTerm.Store(rn.Term())
 
@@ -262,6 +283,26 @@ func (n *Node) ValidateReadPermit(p ReadPermit) bool {
 	return p.Term != 0 && n.IsLeader() && n.Term() == p.Term && time.Now().Before(p.ValidUntil)
 }
 
+// ReadIndex 向当前 Leader 请求安全的 commit index，并等待本地状态机应用到该位置。
+func (n *Node) ReadIndex(ctx context.Context) (uint64, error) {
+	r := &readIndexRequest{resultCh: make(chan readIndexResult, 1)}
+	select {
+	case n.readIndexCh <- r:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-n.stopCh:
+		return 0, ErrStopped
+	}
+	select {
+	case result := <-r.resultCh:
+		return result.index, result.err
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-n.stopCh:
+		return 0, ErrStopped
+	}
+}
+
 // 关闭节点，丢弃所有未完成的提案。可重复调用。
 func (n *Node) Stop() {
 	n.triggerStop()
@@ -320,20 +361,22 @@ func (n *Node) run() {
 			}
 		case r := <-n.readCh:
 			n.handleReadRequest(r)
+		case r := <-n.readIndexCh:
+			n.handleReadIndexRequest(r)
 		case <-n.stopCh:
 			return
 		}
 
 		n.expireQuorumCheck()
-		if !n.rn.HasReady() {
-			continue
-		}
-		if err := n.processReady(); err != nil {
-			// 持久化失败或 apply 损坏：不可恢复。记录后发起有序停机，
-			// 由 Server 经 Done() 感知并释放资源，绝不在此 os.Exit。
-			log.Printf("raftstore: fatal error in ready loop, shutting down: %v\n", err)
-			n.markFatal(err)
-			return
+		n.expireReadIndexes()
+		for n.rn.HasReady() {
+			if err := n.processReady(); err != nil {
+				// 持久化失败或 apply 损坏：不可恢复。记录后发起有序停机，
+				// 由 Server 经 Done() 感知并释放资源，绝不在此 os.Exit。
+				log.Printf("raftstore: fatal error in ready loop, shutting down: %v\n", err)
+				n.markFatal(err)
+				return
+			}
 		}
 	}
 }
@@ -376,6 +419,8 @@ func (n *Node) processReady() error {
 
 	n.rn.Advance(&rd)
 	n.finishQuorumCheck(&rd)
+	n.handleReadStates(rd.ReadStates)
+	n.releaseAppliedReadIndexes()
 
 	for _, r := range results {
 		if p, ok := n.pending[r.ProposalID]; ok {
@@ -398,48 +443,54 @@ func (n *Node) handleReadRequest(r *readRequest) {
 		return
 	}
 	n.readWaiters = append(n.readWaiters, r)
-	if n.confirmRound != 0 {
+	if n.confirmRequestID != 0 {
 		return
 	}
+	n.startLeaseQuorum(now, term)
+}
+
+func (n *Node) startLeaseQuorum(now time.Time, term uint64) {
 	n.readRound++
 	if n.readRound == 0 {
 		n.readRound++
 	}
-	n.confirmRound = n.readRound
+	n.confirmRequestID = n.readRound
 	n.confirmTerm = term
 	n.confirmUntil = now.Add(n.leaseDuration)
-	if err := n.rn.CheckQuorum(n.confirmRound); err != nil {
+	if err := n.rn.CheckQuorum(n.confirmRequestID); err != nil {
 		n.failReadWaiters(ErrNotLeader)
 	}
 }
 
 func (n *Node) finishQuorumCheck(rd *raft.Ready) {
-	if !n.rn.IsLeader() || (n.confirmRound != 0 && n.rn.Term() != n.confirmTerm) {
+	if !n.rn.IsLeader() || (n.confirmRequestID != 0 && n.rn.Term() != n.confirmTerm) {
 		n.leaseTerm = 0
 		n.leaseUntil = time.Time{}
 		n.failReadWaiters(ErrNotLeader)
 		return
 	}
-	confirmed := rd.QuorumConfirmed
-	if confirmed == nil || confirmed.Round != n.confirmRound || confirmed.Term != n.confirmTerm {
+	for _, confirmed := range rd.QuorumConfirmed {
+		if confirmed.RequestID != n.confirmRequestID {
+			continue
+		}
+		if confirmed.Rejected || !time.Now().Before(n.confirmUntil) {
+			n.failReadWaiters(ErrQuorumTimeout)
+			return
+		}
+		n.leaseTerm = confirmed.Term
+		n.leaseUntil = n.confirmUntil
+		permit := ReadPermit{Term: n.leaseTerm, ValidUntil: n.leaseUntil}
+		for _, r := range n.readWaiters {
+			r.resultCh <- readPermitResult{permit: permit}
+		}
+		n.readWaiters = nil
+		n.clearQuorumCheck()
 		return
 	}
-	if !time.Now().Before(n.confirmUntil) {
-		n.failReadWaiters(ErrQuorumTimeout)
-		return
-	}
-	n.leaseTerm = confirmed.Term
-	n.leaseUntil = n.confirmUntil
-	permit := ReadPermit{Term: n.leaseTerm, ValidUntil: n.leaseUntil}
-	for _, r := range n.readWaiters {
-		r.resultCh <- readPermitResult{permit: permit}
-	}
-	n.readWaiters = nil
-	n.clearQuorumCheck()
 }
 
 func (n *Node) expireQuorumCheck() {
-	if n.confirmRound != 0 && !time.Now().Before(n.confirmUntil) {
+	if len(n.readWaiters) > 0 && !n.confirmUntil.IsZero() && !time.Now().Before(n.confirmUntil) {
 		n.failReadWaiters(ErrQuorumTimeout)
 	}
 }
@@ -453,9 +504,62 @@ func (n *Node) failReadWaiters(err error) {
 }
 
 func (n *Node) clearQuorumCheck() {
-	n.confirmRound = 0
+	n.confirmRequestID = 0
 	n.confirmTerm = 0
 	n.confirmUntil = time.Time{}
+}
+
+func (n *Node) handleReadIndexRequest(r *readIndexRequest) {
+	n.readRound++
+	if n.readRound == 0 {
+		n.readRound++
+	}
+	requestID := n.readRound
+	if err := n.rn.ReadIndex(requestID); err != nil {
+		r.resultCh <- readIndexResult{err: err}
+		return
+	}
+	n.pendingReadIndex[requestID] = &pendingReadIndex{
+		request:  r,
+		deadline: time.Now().Add(n.readIndexTimeout),
+	}
+}
+
+func (n *Node) handleReadStates(states []raft.ReadState) {
+	for _, state := range states {
+		pending := n.pendingReadIndex[state.RequestID]
+		if pending == nil {
+			continue
+		}
+		if state.Rejected {
+			delete(n.pendingReadIndex, state.RequestID)
+			pending.request.resultCh <- readIndexResult{err: ErrNotLeader}
+			continue
+		}
+		pending.index = state.Index
+	}
+}
+
+func (n *Node) releaseAppliedReadIndexes() {
+	applied := n.rn.AppliedIndex()
+	for requestID, pending := range n.pendingReadIndex {
+		if pending.index == 0 || pending.index > applied {
+			continue
+		}
+		delete(n.pendingReadIndex, requestID)
+		pending.request.resultCh <- readIndexResult{index: pending.index}
+	}
+}
+
+func (n *Node) expireReadIndexes() {
+	now := time.Now()
+	for requestID, pending := range n.pendingReadIndex {
+		if now.Before(pending.deadline) {
+			continue
+		}
+		delete(n.pendingReadIndex, requestID)
+		pending.request.resultCh <- readIndexResult{err: ErrReadIndexTimeout}
+	}
 }
 
 // 将快照写入存储并恢复状态机，Follower 侧收到快照时触发。

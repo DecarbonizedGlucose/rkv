@@ -206,7 +206,9 @@ func TestQuorumCheckIgnoresStaleRound(t *testing.T) {
 	leader.becomeLeader()
 	_ = readMessages(leader) // 丢弃当选时复制 no-op 的普通 Append
 
-	require.NoError(t, leader.checkQuorum(1))
+	err := leader.checkQuorum(1)
+	require.NoError(t, err)
+	round1ID := leader.quorumRound
 	round1 := readMessages(leader)
 	var staleResponse *raftpb.RaftMessage
 	for _, msg := range round1 {
@@ -218,10 +220,14 @@ func TestQuorumCheckIgnoresStaleRound(t *testing.T) {
 	}
 	require.NotNil(t, staleResponse)
 
-	require.NoError(t, leader.checkQuorum(2))
+	leader.abortQuorum() // 模拟上一轮超时
+	leader.quorumConfirmed = nil
+	err = leader.checkQuorum(2)
+	require.NoError(t, err)
+	require.NotEqual(t, round1ID, leader.quorumRound)
 	round2 := readMessages(leader)
 	require.NoError(t, leader.step(staleResponse))
-	assert.Nil(t, leader.quorumConfirmed)
+	assert.Empty(t, leader.quorumConfirmed)
 
 	var current *raftpb.RaftMessage
 	for _, msg := range round2 {
@@ -233,9 +239,168 @@ func TestQuorumCheckIgnoresStaleRound(t *testing.T) {
 	}
 	require.NotNil(t, current)
 	require.NoError(t, leader.step(current))
-	require.NotNil(t, leader.quorumConfirmed)
-	assert.Equal(t, uint64(2), leader.quorumConfirmed.Round)
+	require.Len(t, leader.quorumConfirmed, 1)
+	assert.Equal(t, uint64(2), leader.quorumConfirmed[0].RequestID)
 	assert.True(t, leader.raftLog.matchTerm(leader.hardState.CommitIndex, leader.hardState.Term))
+}
+
+func TestFollowerReadIndex(t *testing.T) {
+	leader := newTestRaft(1, []uint64{1, 2, 3})
+	follower := newTestRaft(2, []uint64{1, 2, 3})
+	leader.becomeCandidate()
+	leader.becomeLeader()
+	relayAppendResponses(t, leader, follower) // 提交当前 term 的 no-op
+	require.True(t, leader.raftLog.matchTerm(leader.hardState.CommitIndex, leader.hardState.Term))
+
+	require.NoError(t, follower.requestReadIndex(100))
+	request := readMessages(follower)[0]
+	require.Equal(t, raftpb.MessageType_READ_INDEX_REQ, request.Type)
+	require.NoError(t, leader.step(request))
+
+	var appendToFollower *raftpb.RaftMessage
+	for _, msg := range readMessages(leader) {
+		if msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == follower.id {
+			appendToFollower = msg
+		}
+	}
+	require.NotNil(t, appendToFollower)
+	require.NoError(t, follower.step(appendToFollower))
+	require.NoError(t, leader.step(readMessages(follower)[0]))
+
+	var response *raftpb.RaftMessage
+	for _, msg := range readMessages(leader) {
+		if msg.Type == raftpb.MessageType_READ_INDEX_RESP {
+			response = msg
+		}
+	}
+	require.NotNil(t, response)
+	assert.True(t, response.GetReadIndexResp().Success)
+	assert.Equal(t, leader.hardState.CommitIndex, response.GetReadIndexResp().ReadIndex)
+
+	require.NoError(t, follower.step(response))
+	require.Len(t, follower.readStates, 1)
+	assert.Equal(t, uint64(100), follower.readStates[0].RequestID)
+	assert.Equal(t, leader.hardState.CommitIndex, follower.readStates[0].Index)
+}
+
+func TestReadIndexAndLeaderLeaseShareNextRound(t *testing.T) {
+	leader := newTestRaft(1, []uint64{1, 2, 3})
+	follower := newTestRaft(2, []uint64{1, 2, 3})
+	leader.becomeCandidate()
+	leader.becomeLeader()
+	relayAppendResponses(t, leader, follower)
+
+	require.NoError(t, follower.requestReadIndex(1))
+	require.NoError(t, leader.step(readMessages(follower)[0]))
+	firstRound := readMessages(leader)
+
+	require.NoError(t, follower.requestReadIndex(2))
+	require.NoError(t, leader.step(readMessages(follower)[0]))
+	require.NoError(t, leader.checkQuorum(99)) // Leader 本地 Lease consumer
+	assert.Len(t, leader.activeQuorum, 1)
+	assert.Len(t, leader.queuedQuorum, 2)
+
+	for _, msg := range firstRound {
+		if msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == follower.id {
+			require.NoError(t, follower.step(msg))
+			require.NoError(t, leader.step(readMessages(follower)[0]))
+			break
+		}
+	}
+	responses := readMessages(leader)
+	require.Len(t, responses, 1)
+	assert.Equal(t, uint64(1), responses[0].GetReadIndexResp().RequestId)
+
+	// Ready.Advance 清除第一轮确认后才启动下一轮。
+	leader.quorumConfirmed = nil
+	leader.maybeStartQueuedQuorum()
+	assert.NotZero(t, leader.quorumRound)
+	assert.Len(t, leader.activeQuorum, 2)
+
+	secondRound := readMessages(leader)
+	for _, msg := range secondRound {
+		if msg.Type == raftpb.MessageType_APPEND_REQ && msg.To == follower.id {
+			require.NoError(t, follower.step(msg))
+			require.NoError(t, leader.step(readMessages(follower)[0]))
+			break
+		}
+	}
+	require.Len(t, leader.quorumConfirmed, 1)
+	assert.Equal(t, uint64(99), leader.quorumConfirmed[0].RequestID)
+	responses = readMessages(leader)
+	require.Len(t, responses, 1)
+	assert.Equal(t, uint64(2), responses[0].GetReadIndexResp().RequestId)
+}
+
+func TestQuorumRoundTimeoutClearsConsumers(t *testing.T) {
+	leader := newTestRaft(1, []uint64{1, 2, 3, 4, 5})
+	leader.becomeCandidate()
+	leader.becomeLeader()
+	_ = readMessages(leader)
+
+	for _, requestID := range []uint64{1, 2} {
+		require.NoError(t, leader.step(&raftpb.RaftMessage{
+			From: 2, To: 1, Term: leader.hardState.Term, Type: raftpb.MessageType_READ_INDEX_REQ,
+			Body: &raftpb.RaftMessage_ReadIndexReq{ReadIndexReq: &raftpb.ReadIndexRequest{RequestId: requestID}},
+		}))
+	}
+	require.NoError(t, leader.checkQuorum(99))
+	_ = readMessages(leader)
+
+	for range leader.electionTimeout {
+		leader.tick()
+	}
+	assert.Zero(t, leader.quorumRound)
+	assert.Empty(t, leader.activeQuorum)
+	assert.Empty(t, leader.queuedQuorum)
+
+	failures := 0
+	for _, msg := range readMessages(leader) {
+		if msg.Type == raftpb.MessageType_READ_INDEX_RESP && !msg.GetReadIndexResp().Success {
+			failures++
+		}
+	}
+	assert.Equal(t, 2, failures)
+	require.Len(t, leader.quorumConfirmed, 1)
+	assert.Equal(t, uint64(99), leader.quorumConfirmed[0].RequestID)
+	assert.True(t, leader.quorumConfirmed[0].Rejected)
+
+	// 超时后的 scheduler 必须能接受新一轮，不能永久卡在 in-progress。
+	require.NoError(t, leader.checkQuorum(100))
+	assert.NotZero(t, leader.quorumRound)
+	assert.Len(t, leader.activeQuorum, 1)
+}
+
+func TestLeaderStepdownRejectsPendingQuorumConsumers(t *testing.T) {
+	leader := newTestRaft(1, []uint64{1, 2, 3})
+	leader.becomeCandidate()
+	leader.becomeLeader()
+	_ = readMessages(leader)
+
+	for _, requestID := range []uint64{1, 2} {
+		require.NoError(t, leader.step(&raftpb.RaftMessage{
+			From: 2, To: 1, Term: leader.hardState.Term, Type: raftpb.MessageType_READ_INDEX_REQ,
+			Body: &raftpb.RaftMessage_ReadIndexReq{ReadIndexReq: &raftpb.ReadIndexRequest{RequestId: requestID}},
+		}))
+	}
+	require.NoError(t, leader.checkQuorum(99))
+	_ = readMessages(leader)
+
+	leader.becomeFollower(leader.hardState.Term+1, 0)
+	assert.Zero(t, leader.quorumRound)
+	assert.Empty(t, leader.activeQuorum)
+	assert.Empty(t, leader.queuedQuorum)
+
+	failures := 0
+	for _, msg := range readMessages(leader) {
+		if msg.Type == raftpb.MessageType_READ_INDEX_RESP && !msg.GetReadIndexResp().Success {
+			failures++
+		}
+	}
+	assert.Equal(t, 2, failures)
+	require.Len(t, leader.quorumConfirmed, 1)
+	assert.Equal(t, uint64(99), leader.quorumConfirmed[0].RequestID)
+	assert.True(t, leader.quorumConfirmed[0].Rejected)
 }
 
 // ========================================

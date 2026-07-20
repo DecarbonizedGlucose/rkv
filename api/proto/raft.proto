@@ -26,6 +26,8 @@ enum MessageType {
     HUP                   = 8; // 无消息体
     PROPOSE               = 9; // body 是 Entry
     HANDSHAKE             = 10; // 用于传输层握手，无消息体
+    READ_INDEX_REQ        = 11;
+    READ_INDEX_RESP       = 12;
 }
 
 message RaftMessage {
@@ -42,7 +44,19 @@ message RaftMessage {
         InstallSnapshotRequest  snap_req       = 14;
         InstallSnapshotResponse snap_resp      = 15;
         Entry                   propose        = 16;
+        ReadIndexRequest        read_index_req = 17;
+        ReadIndexResponse       read_index_resp = 18;
     }
+}
+
+message ReadIndexRequest {
+    uint64 request_id = 1;
+}
+
+message ReadIndexResponse {
+    uint64 request_id = 1;
+    uint64 read_index = 2;
+    bool   success    = 3;
 }
 
 message AppendEntriesRequest {

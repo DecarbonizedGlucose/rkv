@@ -23,10 +23,15 @@ type Raft struct {
 
 	msgs []*raftpb.RaftMessage // 待发送的消息
 
+	nextQuorumRound uint64
 	quorumRound     uint64
 	quorumTerm      uint64
+	quorumElapsed   int
 	quorumAcks      map[uint64]struct{}
-	quorumConfirmed *QuorumConfirmation
+	activeQuorum    []quorumConsumer
+	queuedQuorum    []quorumConsumer
+	quorumConfirmed []QuorumConfirmation
+	readStates      []ReadState
 
 	electionTimeout           int
 	randomizedElectionTimeout int
@@ -34,6 +39,16 @@ type Raft struct {
 
 	heartbeatTimeout int
 	heartbeatElapsed int
+}
+
+type readIndexRequest struct {
+	from      uint64
+	requestID uint64
+}
+
+type quorumConsumer struct {
+	localRequestID uint64
+	readIndex      *readIndexRequest
 }
 
 func newRaft(cfg *Config) (*Raft, error) {
@@ -84,6 +99,12 @@ func (r *Raft) resetRandomizedElectionTimeout() {
 func (r *Raft) tick() {
 	switch r.state {
 	case stateLeader:
+		if r.quorumRound != 0 {
+			r.quorumElapsed++
+			if r.quorumElapsed >= r.electionTimeout {
+				r.abortQuorum()
+			}
+		}
 		r.heartbeatElapsed++
 		if r.heartbeatElapsed >= r.heartbeatTimeout {
 			r.heartbeatElapsed = 0
@@ -108,7 +129,6 @@ func (r *Raft) tick() {
 }
 
 func (r *Raft) becomeFollower(term, leader_id uint64) {
-	r.clearQuorumCheck()
 	r.state = stateFollower
 	r.leader_id = leader_id
 	r.electionElapsed = 0
@@ -117,23 +137,25 @@ func (r *Raft) becomeFollower(term, leader_id uint64) {
 		r.hardState.Term = term
 		r.hardState.Vote = 0
 	}
+	r.abortQuorum()
 }
 
 func (r *Raft) becomeCandidate() {
-	r.clearQuorumCheck()
 	r.state = stateCandidate
 	r.leader_id = 0
 	r.electionElapsed = 0
 	r.hardState.Term++
 	r.hardState.Vote = r.id
 	r.votes = map[uint64]bool{r.id: true}
+	r.abortQuorum()
 }
 
 func (r *Raft) becomeLeader() {
-	r.clearQuorumCheck()
+	r.abortQuorum()
 	r.state = stateLeader
 	r.leader_id = r.id
 	r.electionElapsed = 0
+	r.nextQuorumRound = 0
 
 	for _, pr := range r.prs {
 		pr.MatchIndex = 0
@@ -211,6 +233,12 @@ func (r *Raft) step(m *raftpb.RaftMessage) error {
 
 	case raftpb.MessageType_INSTALL_SNAPSHOT_RESP:
 		r.handleInstallSnapshotResponse(m)
+
+	case raftpb.MessageType_READ_INDEX_REQ:
+		r.handleReadIndexRequest(m)
+
+	case raftpb.MessageType_READ_INDEX_RESP:
+		r.handleReadIndexResponse(m)
 	}
 	return nil
 }
@@ -354,17 +382,37 @@ func (r *Raft) handleAppendResponse(m *raftpb.RaftMessage) {
 	r.maybeConfirmQuorum(m.From, resp)
 }
 
-func (r *Raft) checkQuorum(round uint64) error {
+func (r *Raft) checkQuorum(requestID uint64) error {
 	if r.state != stateLeader {
 		return ErrNotLeader
 	}
-	r.quorumRound = round
+	if requestID == 0 {
+		return fmt.Errorf("raft: quorum request ID must not be zero")
+	}
+	r.enqueueQuorum(quorumConsumer{localRequestID: requestID})
+	return nil
+}
+
+func (r *Raft) enqueueQuorum(consumer quorumConsumer) {
+	if r.quorumRound != 0 {
+		r.queuedQuorum = append(r.queuedQuorum, consumer)
+		return
+	}
+	r.activeQuorum = append(r.activeQuorum, consumer)
+	r.startQuorum()
+}
+
+func (r *Raft) startQuorum() {
+	r.nextQuorumRound++
+	if r.nextQuorumRound == 0 {
+		r.nextQuorumRound++
+	}
+	r.quorumRound = r.nextQuorumRound
 	r.quorumTerm = r.hardState.Term
+	r.quorumElapsed = 0
 	r.quorumAcks = map[uint64]struct{}{r.id: {}}
-	r.quorumConfirmed = nil
 	r.broadcastHeartbeat()
 	r.maybeConfirmQuorum(0, nil)
-	return nil
 }
 
 func (r *Raft) maybeConfirmQuorum(from uint64, resp *raftpb.AppendEntriesResponse) {
@@ -381,17 +429,127 @@ func (r *Raft) maybeConfirmQuorum(from uint64, resp *raftpb.AppendEntriesRespons
 		!r.raftLog.matchTerm(r.hardState.CommitIndex, r.hardState.Term) {
 		return
 	}
-	r.quorumConfirmed = &QuorumConfirmation{Term: r.quorumTerm, Round: r.quorumRound}
+	readIndex := r.hardState.CommitIndex
+	for _, consumer := range r.activeQuorum {
+		if consumer.localRequestID != 0 {
+			r.quorumConfirmed = append(r.quorumConfirmed, QuorumConfirmation{
+				RequestID: consumer.localRequestID,
+				Term:      r.quorumTerm,
+				Round:     r.quorumRound,
+			})
+		}
+		if consumer.readIndex != nil {
+			req := consumer.readIndex
+			r.sendReadIndexResponse(req.from, req.requestID, readIndex, true)
+		}
+	}
+	r.activeQuorum = nil
+	r.resetQuorumRound()
+}
+
+func (r *Raft) resetQuorumRound() {
 	r.quorumRound = 0
 	r.quorumTerm = 0
+	r.quorumElapsed = 0
 	r.quorumAcks = nil
 }
 
-func (r *Raft) clearQuorumCheck() {
-	r.quorumRound = 0
-	r.quorumTerm = 0
-	r.quorumAcks = nil
-	r.quorumConfirmed = nil
+func (r *Raft) abortQuorum() {
+	for _, consumer := range append(r.activeQuorum, r.queuedQuorum...) {
+		if consumer.localRequestID != 0 {
+			r.quorumConfirmed = append(r.quorumConfirmed, QuorumConfirmation{
+				RequestID: consumer.localRequestID,
+				Term:      r.hardState.Term,
+				Round:     r.quorumRound,
+				Rejected:  true,
+			})
+		}
+		if consumer.readIndex != nil {
+			req := consumer.readIndex
+			r.sendReadIndexResponse(req.from, req.requestID, 0, false)
+		}
+	}
+	r.activeQuorum = nil
+	r.queuedQuorum = nil
+	r.resetQuorumRound()
+}
+
+func (r *Raft) requestReadIndex(requestID uint64) error {
+	if requestID == 0 {
+		return fmt.Errorf("raft: read index request ID must not be zero")
+	}
+	if r.leader_id == 0 {
+		return ErrLeaderUnknown
+	}
+	if r.state == stateLeader {
+		return ErrReadIndexOnLeader
+	}
+	r.send(&raftpb.RaftMessage{
+		From: r.id,
+		To:   r.leader_id,
+		Type: raftpb.MessageType_READ_INDEX_REQ,
+		Term: r.hardState.Term,
+		Body: &raftpb.RaftMessage_ReadIndexReq{ReadIndexReq: &raftpb.ReadIndexRequest{
+			RequestId: requestID,
+		}},
+	})
+	return nil
+}
+
+func (r *Raft) handleReadIndexRequest(m *raftpb.RaftMessage) {
+	req := m.GetReadIndexReq()
+	if req == nil || req.RequestId == 0 {
+		return
+	}
+	if r.state != stateLeader {
+		r.sendReadIndexResponse(m.From, req.RequestId, 0, false)
+		return
+	}
+	for _, consumer := range append(r.activeQuorum, r.queuedQuorum...) {
+		if consumer.readIndex != nil && consumer.readIndex.from == m.From && consumer.readIndex.requestID == req.RequestId {
+			return
+		}
+	}
+	pending := &readIndexRequest{from: m.From, requestID: req.RequestId}
+	r.enqueueQuorum(quorumConsumer{readIndex: pending})
+}
+
+func (r *Raft) maybeStartQueuedQuorum() {
+	if r.state != stateLeader || r.quorumRound != 0 || len(r.queuedQuorum) == 0 {
+		return
+	}
+	r.activeQuorum = r.queuedQuorum
+	r.queuedQuorum = nil
+	r.startQuorum()
+}
+
+func (r *Raft) sendReadIndexResponse(to, requestID, readIndex uint64, success bool) {
+	r.send(&raftpb.RaftMessage{
+		From: r.id,
+		To:   to,
+		Type: raftpb.MessageType_READ_INDEX_RESP,
+		Term: r.hardState.Term,
+		Body: &raftpb.RaftMessage_ReadIndexResp{ReadIndexResp: &raftpb.ReadIndexResponse{
+			RequestId: requestID,
+			ReadIndex: readIndex,
+			Success:   success,
+		}},
+	})
+}
+
+func (r *Raft) handleReadIndexResponse(m *raftpb.RaftMessage) {
+	if m.Term < r.hardState.Term {
+		return
+	}
+	resp := m.GetReadIndexResp()
+	if resp == nil || resp.RequestId == 0 {
+		return
+	}
+	r.readStates = append(r.readStates, ReadState{
+		RequestID: resp.RequestId,
+		Index:     resp.ReadIndex,
+		Rejected:  !resp.Success,
+	})
 }
 
 func (r *Raft) startElection() {
