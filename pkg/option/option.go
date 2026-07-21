@@ -32,6 +32,8 @@ type Option struct {
 	RaftAddr string
 	// GRPCAddr 是对外客户端 gRPC 服务的地址（本节点）。
 	GRPCAddr string
+	// AllowFollowerRead 允许客户端显式请求由 Follower 通过 ReadIndex 执行线性一致性读。
+	AllowFollowerRead bool
 }
 
 func DefaultConfig() *Option {

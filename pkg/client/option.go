@@ -13,10 +13,17 @@ const (
 
 // Options 收集 NewClient 的所有可选参数。
 type Options struct {
-	endpoint string
-	peers    map[uint64]string
-	grpcOpts []grpc.DialOption
-	hasCreds bool // WithTLS 已设置 transport credentials，不需要再注入 insecure
+	endpoint          string
+	peers             map[uint64]string
+	grpcOpts          []grpc.DialOption
+	hasCreds          bool // WithTLS 已设置 transport credentials，不需要再注入 insecure
+	allowFollowerRead bool
+}
+
+// WithFollowerRead 允许 Get/Range 在 Server 同样启用该能力时由 Follower 通过 ReadIndex 处理。
+func (o *Options) WithFollowerRead(allow bool) *Options {
+	o.allowFollowerRead = allow
+	return o
 }
 
 func DefaultOptions() *Options {

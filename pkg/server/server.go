@@ -119,7 +119,7 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 		return err
 	}
 
-	s.kvServer = kv.NewKVServer(node, kvStor, s.revMgr, o.NodeID, s.pidMgr)
+	s.kvServer = kv.NewKVServer(node, kvStor, s.revMgr, o.NodeID, s.pidMgr, o.AllowFollowerRead)
 
 	wm := watch.NewWatchManager(s.revMgr)
 	s.watchServer = watch.NewWatchServer(wm, node, o.NodeID, s.revMgr, kvStor)

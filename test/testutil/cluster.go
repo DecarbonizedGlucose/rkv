@@ -38,6 +38,15 @@ type clusterNode struct {
 //
 // Requires ./bin/rkv to exist. Run `make build` first, or set RKV_BIN env var.
 func StartCluster(t *testing.T, n int) *Cluster {
+	return startCluster(t, n, false)
+}
+
+// StartClusterWithFollowerRead starts a cluster whose servers accept explicit Follower reads.
+func StartClusterWithFollowerRead(t *testing.T, n int) *Cluster {
+	return startCluster(t, n, true)
+}
+
+func startCluster(t *testing.T, n int, allowFollowerRead bool) *Cluster {
 	t.Helper()
 
 	bin := rkvBinPath(t)
@@ -73,6 +82,7 @@ func StartCluster(t *testing.T, n int) *Cluster {
 			fmt.Sprintf("-raft-dir=%s", raftDir),
 			fmt.Sprintf("-raft-addr=%s", addrs[i].raft),
 			fmt.Sprintf("-grpc-addr=%s", addrs[i].grpc),
+			fmt.Sprintf("-allow-follower-read=%t", allowFollowerRead),
 		)
 		// Suppress node output unless test is verbose
 		if testing.Verbose() {

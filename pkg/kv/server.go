@@ -15,36 +15,35 @@ import (
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/rpcpb"
 	"github.com/DecarbonizedGlucose/rkv/pkg/raftstore"
+	"github.com/DecarbonizedGlucose/rkv/pkg/rpcmeta"
 	"github.com/DecarbonizedGlucose/rkv/pkg/storage"
 )
 
 type KVServer struct {
 	rpcpb.UnimplementedKVServiceServer
-	node   *raftstore.Node
-	stor   storage.Storage
-	revMgr *RevisionManager
-	nodeID uint64
-	pidMgr *ProposalIDManager
+	node              *raftstore.Node
+	stor              storage.Storage
+	revMgr            *RevisionManager
+	nodeID            uint64
+	pidMgr            *ProposalIDManager
+	allowFollowerRead bool
 }
 
-func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionManager, nodeID uint64, pidMgr *ProposalIDManager) *KVServer {
+func NewKVServer(node *raftstore.Node, stor storage.Storage, revMgr *RevisionManager, nodeID uint64, pidMgr *ProposalIDManager, allowFollowerRead bool) *KVServer {
 	return &KVServer{
-		node:   node,
-		stor:   stor,
-		revMgr: revMgr,
-		nodeID: nodeID,
-		pidMgr: pidMgr,
+		node:              node,
+		stor:              stor,
+		revMgr:            revMgr,
+		nodeID:            nodeID,
+		pidMgr:            pidMgr,
+		allowFollowerRead: allowFollowerRead,
 	}
 }
 
 // ==================== 读接口 ====================
 
 func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResponse, error) {
-	if !s.isLeader(ctx) {
-		log.Println("KVServer: get request rejected, not leader")
-		return nil, status.Error(codes.FailedPrecondition, "not leader")
-	}
-	readRev, err := s.acquireReadRevision(ctx)
+	readRev, err := s.acquireReadRevision(ctx, clientAllowsFollowerRead(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -72,15 +71,11 @@ func (s *KVServer) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetResp
 }
 
 func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.RangeResponse, error) {
-	if !s.isLeader(ctx) {
-		log.Println("KVServer: range request rejected, not leader")
-		return nil, status.Error(codes.FailedPrecondition, "not leader")
-	}
 	end := req.RangeEnd
 	if len(end) == 0 {
 		end = nil
 	}
-	readRev, err := s.acquireReadRevision(ctx)
+	readRev, err := s.acquireReadRevision(ctx, clientAllowsFollowerRead(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +99,19 @@ func (s *KVServer) Range(ctx context.Context, req *kvpb.RangeRequest) (*kvpb.Ran
 		Count:  int64(len(kvs)),
 		More:   more,
 	}, nil
+}
+
+func clientAllowsFollowerRead(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	for _, value := range md.Get(rpcmeta.AllowFollowerReadKey) {
+		if value == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 // ==================== 写接口 ====================
@@ -166,8 +174,28 @@ func (s *KVServer) isLeader(ctx context.Context) bool {
 	return false
 }
 
-func (s *KVServer) acquireReadRevision(ctx context.Context) (uint64, error) {
+func (s *KVServer) acquireReadRevision(ctx context.Context, clientAllowsFollower bool) (uint64, error) {
 	for {
+		if !s.node.IsLeader() {
+			if !s.allowFollowerRead || !clientAllowsFollower {
+				grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
+				return 0, status.Error(codes.FailedPrecondition, "not leader")
+			}
+			if _, err := s.node.ReadIndex(ctx); err != nil {
+				if s.node.IsLeader() {
+					continue
+				}
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return 0, status.FromContextError(err).Err()
+				}
+				grpc.SetTrailer(ctx, metadata.Pairs("leader-id", fmt.Sprintf("%d", s.node.LeaderID())))
+				if errors.Is(err, raftstore.ErrNotLeader) {
+					return 0, status.Error(codes.FailedPrecondition, "not leader")
+				}
+				return 0, status.Error(codes.Unavailable, "read index unavailable")
+			}
+			return s.stor.MaxRevision(), nil
+		}
 		permit, err := s.node.AcquireReadPermit(ctx)
 		if err != nil {
 			if errors.Is(err, raftstore.ErrNotLeader) {

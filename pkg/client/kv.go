@@ -4,8 +4,10 @@ import (
 	"context"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/DecarbonizedGlucose/rkv/api/proto/pkg/kvpb"
+	"github.com/DecarbonizedGlucose/rkv/pkg/rpcmeta"
 )
 
 // Put 写入或更新 key-value，leaseID=0 表示不绑定租约。
@@ -19,7 +21,7 @@ func (c *Client) Put(ctx context.Context, key, value []byte, leaseID int64) (*kv
 
 // Get 查询单个 key。kv 为 nil 且 count=0 表示 key 不存在。
 func (c *Client) Get(ctx context.Context, key []byte) (*kvpb.GetResponse, error) {
-	return callUnary(c, ctx, &kvpb.GetRequest{Key: key},
+	return callUnary(c, c.followerReadContext(ctx), &kvpb.GetRequest{Key: key},
 		func(ctx context.Context, req *kvpb.GetRequest, opts ...grpc.CallOption) (*kvpb.GetResponse, error) {
 			return c.getKVStub().Get(ctx, req, opts...)
 		},
@@ -37,7 +39,7 @@ func (c *Client) Delete(ctx context.Context, key []byte) (*kvpb.DeleteResponse, 
 
 // Range 返回 [from, to) 范围内的 KV，limit=0 表示不限制数量。
 func (c *Client) Range(ctx context.Context, from, to []byte, limit int64) (*kvpb.RangeResponse, error) {
-	return callUnary(c, ctx, &kvpb.RangeRequest{RangeStart: from, RangeEnd: to, Limit: limit},
+	return callUnary(c, c.followerReadContext(ctx), &kvpb.RangeRequest{RangeStart: from, RangeEnd: to, Limit: limit},
 		func(ctx context.Context, req *kvpb.RangeRequest, opts ...grpc.CallOption) (*kvpb.RangeResponse, error) {
 			return c.getKVStub().Range(ctx, req, opts...)
 		},
@@ -46,11 +48,18 @@ func (c *Client) Range(ctx context.Context, from, to []byte, limit int64) (*kvpb
 
 // RangePrefix 返回所有以 prefix 开头的 key。
 func (c *Client) RangePrefix(ctx context.Context, prefix []byte) (*kvpb.RangeResponse, error) {
-	return callUnary(c, ctx, &kvpb.RangeRequest{RangeStart: prefix, RangeEnd: prefixEnd(prefix)},
+	return callUnary(c, c.followerReadContext(ctx), &kvpb.RangeRequest{RangeStart: prefix, RangeEnd: prefixEnd(prefix)},
 		func(ctx context.Context, req *kvpb.RangeRequest, opts ...grpc.CallOption) (*kvpb.RangeResponse, error) {
 			return c.getKVStub().Range(ctx, req, opts...)
 		},
 	)
+}
+
+func (c *Client) followerReadContext(ctx context.Context) context.Context {
+	if !c.allowFollowerRead {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, rpcmeta.AllowFollowerReadKey, "true")
 }
 
 // Txn 执行事务。

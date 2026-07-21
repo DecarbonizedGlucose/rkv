@@ -20,11 +20,11 @@ import (
 // fixture assembles all Week 3 components and simulates the Raft apply path
 // by routing proposeFn directly to StateMachine.Apply.
 type fixture struct {
-	stor storage.Storage
-	sm   *kv.StateMachine
-	wm   *watch.WatchManager
-	tw   *lease.TimeWheel
-	lm   *lease.LeaseManager
+	stor   storage.Storage
+	sm     *kv.StateMachine
+	wm     *watch.WatchManager
+	tw     *lease.TimeWheel
+	lm     *lease.LeaseManager
 	revMgr *kv.RevisionManager
 }
 

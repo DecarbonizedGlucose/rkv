@@ -25,6 +25,8 @@ type Client struct {
 
 	peers    map[uint64]string // nodeID -> gRPC addr；nil 表示单节点模式，构造后不可变
 	dialOpts []grpc.DialOption // 构造后不可变
+
+	allowFollowerRead bool
 }
 
 // NewClient 创建 rkv 客户端。
@@ -52,14 +54,14 @@ func NewClient(o *Options) (*Client, error) {
 		if conn == nil {
 			return nil, fmt.Errorf("rkv: all peers unavailable: %w", lastErr)
 		}
-		return newClient(conn, o.peers, dialOpts), nil
+		return newClient(conn, o.peers, dialOpts, o.allowFollowerRead), nil
 	}
 
 	conn, err := grpc.NewClient(o.endpoint, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("rkv: dial %s: %w", o.endpoint, err)
 	}
-	return newClient(conn, nil, dialOpts), nil
+	return newClient(conn, nil, dialOpts, o.allowFollowerRead), nil
 }
 
 // Close 关闭底层 gRPC 连接。
@@ -181,13 +183,14 @@ func callUnary[Req, Resp any](
 	return resp, translated
 }
 
-func newClient(conn *grpc.ClientConn, peers map[uint64]string, opts []grpc.DialOption) *Client {
+func newClient(conn *grpc.ClientConn, peers map[uint64]string, opts []grpc.DialOption, allowFollowerRead bool) *Client {
 	return &Client{
-		conn:      conn,
-		kvStub:    rpcpb.NewKVServiceClient(conn),
-		watchStub: rpcpb.NewWatchServiceClient(conn),
-		leaseStub: rpcpb.NewLeaseServiceClient(conn),
-		peers:     peers,
-		dialOpts:  opts,
+		conn:              conn,
+		kvStub:            rpcpb.NewKVServiceClient(conn),
+		watchStub:         rpcpb.NewWatchServiceClient(conn),
+		leaseStub:         rpcpb.NewLeaseServiceClient(conn),
+		peers:             peers,
+		dialOpts:          opts,
+		allowFollowerRead: allowFollowerRead,
 	}
 }

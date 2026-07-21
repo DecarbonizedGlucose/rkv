@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
-	"flag"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -18,12 +18,13 @@ import (
 
 func main() {
 	var (
-		peers    string
-		dataDir  string
-		raftDir  string
-		raftAddr string
-		grpcAddr string
-		nodeID   uint64
+		peers             string
+		dataDir           string
+		raftDir           string
+		raftAddr          string
+		grpcAddr          string
+		nodeID            uint64
+		allowFollowerRead bool
 	)
 
 	flag.Uint64Var(&nodeID, "id", 0, "node ID")
@@ -32,6 +33,7 @@ func main() {
 	flag.StringVar(&raftDir, "raft-dir", "", "Raft log directory")
 	flag.StringVar(&raftAddr, "raft-addr", "", "Raft transport address")
 	flag.StringVar(&grpcAddr, "grpc-addr", "", "gRPC API address")
+	flag.BoolVar(&allowFollowerRead, "allow-follower-read", false, "allow linearizable reads through followers")
 	flag.Parse()
 
 	if nodeID == 0 {
@@ -64,6 +66,7 @@ func main() {
 	opts.RaftDir = raftDir
 	opts.RaftAddr = raftAddr
 	opts.GRPCAddr = grpcAddr
+	opts.AllowFollowerRead = allowFollowerRead
 	opts.TickInterval = 100 * time.Millisecond
 
 	if err := opts.SetPeers(peerIDs, peerAddrs); err != nil {

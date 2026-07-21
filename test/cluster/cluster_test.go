@@ -96,3 +96,77 @@ func TestLogReplication(t *testing.T) {
 		assert.Equal(t, []byte(fmt.Sprintf("val-%d", i)), resp.Kv.Value)
 	}
 }
+
+func TestFollowerReadIndex(t *testing.T) {
+	cluster := testutil.StartClusterWithFollowerRead(t, 3)
+	leaderClient := newClient(t, cluster.Peers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	putResp, err := leaderClient.Put(ctx, []byte("follower-read-key"), []byte("value"), 0)
+	require.NoError(t, err)
+	leaderID := putResp.Header.MemberId
+
+	var followerID uint64
+	for id := range cluster.Peers {
+		if id != leaderID {
+			followerID = id
+			break
+		}
+	}
+	require.NotZero(t, followerID)
+
+	// Server 已开启，但 Client 未声明允许时仍只能读取 Leader。
+	leaderOnly, err := client.NewClient(client.DefaultOptions().WithEndpoint(cluster.Peers[followerID]))
+	require.NoError(t, err)
+	t.Cleanup(func() { leaderOnly.Close() })
+	_, err = leaderOnly.Get(ctx, []byte("follower-read-key"))
+	assert.ErrorIs(t, err, client.ErrNotLeader)
+
+	followerClient, err := client.NewClient(client.DefaultOptions().
+		WithEndpoint(cluster.Peers[followerID]).
+		WithFollowerRead(true))
+	require.NoError(t, err)
+	t.Cleanup(func() { followerClient.Close() })
+
+	require.Eventually(t, func() bool {
+		resp, err := followerClient.Get(ctx, []byte("follower-read-key"))
+		return err == nil && resp.Header.MemberId == followerID &&
+			resp.Kv != nil && string(resp.Kv.Value) == "value"
+	}, 5*time.Second, 100*time.Millisecond)
+
+	rangeResp, err := followerClient.Range(ctx, []byte("follower-read-key"), []byte("follower-read-kez"), 0)
+	require.NoError(t, err)
+	assert.Equal(t, followerID, rangeResp.Header.MemberId)
+	require.Len(t, rangeResp.Kvs, 1)
+}
+
+func TestFollowerReadRequiresServerOptIn(t *testing.T) {
+	cluster := testutil.StartCluster(t, 3)
+	leaderClient := newClient(t, cluster.Peers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	putResp, err := leaderClient.Put(ctx, []byte("server-gate-key"), []byte("value"), 0)
+	require.NoError(t, err)
+
+	var followerID uint64
+	for id := range cluster.Peers {
+		if id != putResp.Header.MemberId {
+			followerID = id
+			break
+		}
+	}
+	require.NotZero(t, followerID)
+
+	cli, err := client.NewClient(client.DefaultOptions().
+		WithEndpoint(cluster.Peers[followerID]).
+		WithFollowerRead(true))
+	require.NoError(t, err)
+	t.Cleanup(func() { cli.Close() })
+
+	_, err = cli.Get(ctx, []byte("server-gate-key"))
+	assert.ErrorIs(t, err, client.ErrNotLeader)
+}
