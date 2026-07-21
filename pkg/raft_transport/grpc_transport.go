@@ -2,6 +2,7 @@ package raft_transport
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
@@ -27,6 +29,8 @@ type RGTransport struct {
 	nodeID    uint64
 	selfAddr  string
 	peerAddrs map[uint64]string // map peerID -> addr
+	serverTLS *tls.Config
+	clientTLS *tls.Config
 
 	recvCh      chan *raftpb.RaftMessage // 接收消息的通道
 	dropCounter atomic.Uint64            // 因队列满丢弃的消息计数
@@ -42,9 +46,11 @@ type RGTransport struct {
 }
 
 type Config struct {
-	NodeID   uint64
-	SelfAddr string
-	Peers    map[uint64]string
+	NodeID          uint64
+	SelfAddr        string
+	Peers           map[uint64]string
+	ServerTLSConfig *tls.Config
+	ClientTLSConfig *tls.Config
 }
 
 func New(cfg *Config) *RGTransport {
@@ -56,6 +62,8 @@ func New(cfg *Config) *RGTransport {
 		nodeID:       cfg.NodeID,
 		selfAddr:     cfg.SelfAddr,
 		peerAddrs:    cfg.Peers,
+		serverTLS:    cloneTLSConfig(cfg.ServerTLSConfig),
+		clientTLS:    cloneTLSConfig(cfg.ClientTLSConfig),
 		recvCh:       make(chan *raftpb.RaftMessage, 512),
 		sends:        make(map[uint64]peerStream),
 		sendFailures: make(map[uint64]uint64),
@@ -68,6 +76,9 @@ func New(cfg *Config) *RGTransport {
 
 // 创建 gRPC 服务器并监听，启动连接管理协程
 func (t *RGTransport) Start() error {
+	if (t.serverTLS == nil) != (t.clientTLS == nil) {
+		return fmt.Errorf("transport: server and client TLS must be configured together")
+	}
 	lis, err := net.Listen("tcp", t.selfAddr)
 	if err != nil {
 		return fmt.Errorf("transport: listen %s: %w", t.selfAddr, err)
@@ -81,7 +92,11 @@ func (t *RGTransport) Start() error {
 		Timeout:               10 * time.Second,
 	}
 
-	t.grpcSrv = grpc.NewServer(grpc.KeepaliveParams(kaParams))
+	serverOpts := []grpc.ServerOption{grpc.KeepaliveParams(kaParams)}
+	if t.serverTLS != nil {
+		serverOpts = append(serverOpts, grpc.Creds(credentials.NewTLS(t.serverTLS)))
+	}
+	t.grpcSrv = grpc.NewServer(serverOpts...)
 	raftpb.RegisterRaftTransportServer(t.grpcSrv, &serverHandler{t: t})
 
 	go func() {
@@ -191,8 +206,12 @@ func (t *RGTransport) connectLoop(peerID uint64, addr string) {
 // 尝试建立到 peer 的 gRPC 连接并启动消息接收循环
 // 这个函数返回意味着流RPC已经结束，连接被关闭或发生错误
 func (t *RGTransport) establishStream(peerID uint64, addr string) (bool, error) {
+	transportCreds := credentials.TransportCredentials(insecure.NewCredentials())
+	if t.clientTLS != nil {
+		transportCreds = credentials.NewTLS(t.clientTLS)
+	}
 	conn, err := grpc.NewClient(addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(transportCreds),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                30 * time.Second,
 			Timeout:             10 * time.Second,
@@ -222,6 +241,13 @@ func (t *RGTransport) establishStream(peerID uint64, addr string) (bool, error) 
 	log.Printf("raft_transport[%d]: stream to peer %d established (%s)", t.nodeID, peerID, addr)
 
 	return true, t.serveStream(peerID, stream) // 这里是 Client
+}
+
+func cloneTLSConfig(cfg *tls.Config) *tls.Config {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.Clone()
 }
 
 // 通用接收函数，支持Client和Server

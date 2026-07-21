@@ -1,6 +1,7 @@
 package option
 
 import (
+	"crypto/tls"
 	"fmt"
 	"slices"
 	"time"
@@ -34,6 +35,12 @@ type Option struct {
 	GRPCAddr string
 	// AllowFollowerRead 允许客户端显式请求由 Follower 通过 ReadIndex 执行线性一致性读。
 	AllowFollowerRead bool
+
+	// GRPCTLSConfig 用于对外 gRPC 服务；nil 表示明文。
+	GRPCTLSConfig *tls.Config
+	// RaftServerTLSConfig 和 RaftClientTLSConfig 用于节点间 mTLS；均为 nil 时表示明文。
+	RaftServerTLSConfig *tls.Config
+	RaftClientTLSConfig *tls.Config
 }
 
 func DefaultConfig() *Option {
@@ -69,6 +76,9 @@ func (o *Option) SetRaftDir(raftDir string) *Option {
 }
 
 func (o *Option) Validate() error {
+	if (o.RaftServerTLSConfig == nil) != (o.RaftClientTLSConfig == nil) {
+		return fmt.Errorf("RaftServerTLSConfig and RaftClientTLSConfig must be configured together")
+	}
 	if o.NodeID == 0 {
 		return fmt.Errorf("NodeID must be non-zero")
 	}

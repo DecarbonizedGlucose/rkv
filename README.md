@@ -82,6 +82,22 @@ resp, err := cli.Get(ctx, []byte("key"))
 client.DefaultOptions().WithFollowerRead(true)
 ```
 
+## TLS
+
+对外 gRPC TLS：
+
+```text
+-tls-cert=server.crt -tls-key=server.key
+```
+
+校验客户端证书时增加 `-tls-client-ca=ca.crt`。客户端使用 `WithTLS(*tls.Config)`。
+
+Raft 节点间 mTLS：
+
+```text
+-raft-tls-cert=node.crt -raft-tls-key=node.key -raft-tls-ca=ca.crt
+```
+
 ## 测试
 
 ```bash

@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/proto"
 
@@ -71,9 +72,11 @@ func NewServer(ctx context.Context, o *option.Option) (*Server, error) {
 
 	sm := kv.NewStateMachine(kvStor, s.revMgr)
 	trConfig := &tr.Config{
-		NodeID:   o.NodeID,
-		Peers:    o.PeersAddr,
-		SelfAddr: o.RaftAddr,
+		NodeID:          o.NodeID,
+		Peers:           o.PeersAddr,
+		SelfAddr:        o.RaftAddr,
+		ServerTLSConfig: o.RaftServerTLSConfig,
+		ClientTLSConfig: o.RaftClientTLSConfig,
 	}
 	transport := tr.New(trConfig)
 	s.transport = transport
@@ -141,7 +144,11 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return err
 	}
-	s.grpcServer = grpc.NewServer()
+	var grpcOpts []grpc.ServerOption
+	if s.o.GRPCTLSConfig != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(s.o.GRPCTLSConfig)))
+	}
+	s.grpcServer = grpc.NewServer(grpcOpts...)
 	rpcpb.RegisterKVServiceServer(s.grpcServer, s.kvServer)
 	rpcpb.RegisterWatchServiceServer(s.grpcServer, s.watchServer)
 	rpcpb.RegisterLeaseServiceServer(s.grpcServer, s.leaseServer)

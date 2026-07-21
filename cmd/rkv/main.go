@@ -14,6 +14,7 @@ import (
 
 	"github.com/DecarbonizedGlucose/rkv/pkg/option"
 	"github.com/DecarbonizedGlucose/rkv/pkg/server"
+	"github.com/DecarbonizedGlucose/rkv/pkg/tlsutil"
 )
 
 func main() {
@@ -25,6 +26,12 @@ func main() {
 		grpcAddr          string
 		nodeID            uint64
 		allowFollowerRead bool
+		tlsCert           string
+		tlsKey            string
+		tlsClientCA       string
+		raftTLSCert       string
+		raftTLSKey        string
+		raftTLSCA         string
 	)
 
 	flag.Uint64Var(&nodeID, "id", 0, "node ID")
@@ -34,6 +41,12 @@ func main() {
 	flag.StringVar(&raftAddr, "raft-addr", "", "Raft transport address")
 	flag.StringVar(&grpcAddr, "grpc-addr", "", "gRPC API address")
 	flag.BoolVar(&allowFollowerRead, "allow-follower-read", false, "allow linearizable reads through followers")
+	flag.StringVar(&tlsCert, "tls-cert", "", "client API TLS certificate")
+	flag.StringVar(&tlsKey, "tls-key", "", "client API TLS private key")
+	flag.StringVar(&tlsClientCA, "tls-client-ca", "", "optional CA used to verify client certificates")
+	flag.StringVar(&raftTLSCert, "raft-tls-cert", "", "Raft mTLS certificate")
+	flag.StringVar(&raftTLSKey, "raft-tls-key", "", "Raft mTLS private key")
+	flag.StringVar(&raftTLSCA, "raft-tls-ca", "", "CA used to verify Raft peers")
 	flag.Parse()
 
 	if nodeID == 0 {
@@ -68,6 +81,27 @@ func main() {
 	opts.GRPCAddr = grpcAddr
 	opts.AllowFollowerRead = allowFollowerRead
 	opts.TickInterval = 100 * time.Millisecond
+	if tlsCert != "" || tlsKey != "" || tlsClientCA != "" {
+		if tlsCert == "" || tlsKey == "" {
+			log.Fatal("-tls-cert and -tls-key must be configured together")
+		}
+		cfg, err := tlsutil.LoadServerConfig(tlsCert, tlsKey, tlsClientCA)
+		if err != nil {
+			log.Fatal(err)
+		}
+		opts.GRPCTLSConfig = cfg
+	}
+	if raftTLSCert != "" || raftTLSKey != "" || raftTLSCA != "" {
+		if raftTLSCert == "" || raftTLSKey == "" || raftTLSCA == "" {
+			log.Fatal("-raft-tls-cert, -raft-tls-key and -raft-tls-ca must be configured together")
+		}
+		serverCfg, clientCfg, err := tlsutil.LoadMutualConfig(raftTLSCert, raftTLSKey, raftTLSCA)
+		if err != nil {
+			log.Fatal(err)
+		}
+		opts.RaftServerTLSConfig = serverCfg
+		opts.RaftClientTLSConfig = clientCfg
+	}
 
 	if err := opts.SetPeers(peerIDs, peerAddrs); err != nil {
 		log.Fatal(err)
